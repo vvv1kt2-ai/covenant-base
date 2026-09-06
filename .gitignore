@@ -1,0 +1,13 @@
+﻿downloads/
+__pycache__/
+*.pyc
+*.log
+*.xlsx
+*.html
+*_files/
+results.json
+check_out*.txt
+template_dump.txt
+1.txt
+*.docx
+*.zip

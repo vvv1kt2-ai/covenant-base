@@ -1,0 +1,12 @@
+﻿# Bond emission document parser dependencies
+# Install into existing venv: D:\data-scraping\venv
+
+# Already installed in data-scraping venv:
+# playwright>=1.62.0
+# httpx>=0.28.0
+# beautifulsoup4>=4.15.0
+# lxml>=6.1.0
+
+# New dependencies:
+pdfplumber>=0.11.0
+openpyxl>=3.1.0
