@@ -14,8 +14,8 @@ class Config:
 
     # Finam URLs
     finam_search_url: str = "https://bonds.finam.ru/issue/search/default.asp"
-    finam_card_urlTemplate: str = "https://bonds.finam.ru/issue/details{hex_code}/default.asp"
-    finam_doc_base: str = "http://st.finam.ru/ipo/"
+    finam_card_url_template: str = "https://bonds.finam.ru/issue/details{hex_code}/default.asp"
+    finam_doc_base: str = "https://st.finam.ru/ipo/"
 
     # Browser settings (Playwright)
     browser_headless: bool = True

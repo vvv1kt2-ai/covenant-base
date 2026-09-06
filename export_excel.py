@@ -64,7 +64,7 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
         isin = r.get("isin", "")
         rating = r.get("rating", "")
         covenants = r.get("covenants", [])
-        num_covenants = len(covenants)
+        num_covenants = r.get("total_covenants", len(covenants))
         decision_url = r.get("decision_url", "")
         filename = decision_url.split("/")[-1] if decision_url else ""
         parse_errors = r.get("parse_errors", [])

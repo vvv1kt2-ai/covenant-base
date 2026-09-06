@@ -19,6 +19,9 @@ _EVENT_KEYWORDS = [
     "существенн", "ухудшен", " прекращени",
 ]
 
+# Words that indicate a date definition, not a real event
+_DATE_DEF_WORDS = ["является", "считается", "наступает", "возникает"]
+
 
 @dataclass
 class CovenantEvent:
@@ -219,8 +222,7 @@ class PDFParser:
         """
         events = []
 
-        # Words that indicate a date definition, not a real event
-        _DATE_DEF_WORDS = ["является", "считается", "наступает", "возникает"]
+
 
         # --- Pattern 1: "Событие досрочного погашения ... – N:" ---
         # This is the most specific — only matches the formal "Событие ... – 1:" pattern
@@ -256,7 +258,7 @@ class PDFParser:
         # --- Pattern 2: "Событие N:" at START of line, colon required ---
         # Only "Событие" (nominative), NOT "События" (genitive — used in "Датой наступления События 1")
         # Filter out date definitions: "Событие 1: является первый рабочий день..."
-        _DATE_DEF_WORDS = ["является", "считается", "наступает", "возникает"]
+
         event_pattern_2 = re.compile(
             r"(?:^|\n)\s*Событие\s+(\d+)\s*[:]\s*(.+?)(?=(?:\n\s*Событие\s+\d+\s*[:])|\Z)",
             re.DOTALL | re.IGNORECASE,

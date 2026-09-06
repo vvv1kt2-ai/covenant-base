@@ -11,3 +11,7 @@ template_dump.txt
 1.txt
 *.docx
 *.zip
+fix_*.py
+test_*.py
+show_*.py
+patch_*.py

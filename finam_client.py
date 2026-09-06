@@ -26,6 +26,12 @@ class BondCard:
     card_url: Optional[str] = None
 
 
+try:
+    import httpx as _httpx
+except ImportError:
+    _httpx = None
+
+
 class FinamClient:
     """Manages Playwright browser session for bonds.finam.ru."""
 
@@ -91,7 +97,7 @@ class FinamClient:
                 f"Tip: disconnect VPN or wait."
             )
             time.sleep(cooldown)
-            self._consecutive_errors = max(0, self._consecutive_errors - 1)
+            self._consecutive_errors = 0  # reset after cooldown
 
     def _handle_block(self):
         """Explicitly handle a block detection — long pause + restart browser."""
@@ -116,6 +122,7 @@ class FinamClient:
         logger.info(f"Waiting for ServicePipe challenge (timeout {timeout/1000:.0f}s)...")
 
         # Phase 1: Wait for challenge to complete
+        challenge_passed = False
         while time.time() - start_time < timeout / 1000:
             try:
                 content = self._page.content()
@@ -124,12 +131,16 @@ class FinamClient:
 
                 if not has_spinner and not has_challenge:
                     logger.info("ServicePipe challenge completed")
+                    challenge_passed = True
                     break
 
             except Exception as e:
                 logger.debug(f"Check error: {e}")
 
             time.sleep(0.5)
+
+        if not challenge_passed:
+            logger.error(f"ServicePipe challenge not completed within {timeout/1000:.0f}s")
 
         # Phase 2: Wait for page content to load (AJAX/JS rendering)
         logger.info("Waiting for page content to fully load...")
@@ -240,15 +251,9 @@ class FinamClient:
                             logger.debug(f"Found hex code {hex_part} from link text/href match")
                             return hex_part
 
-            # If no exact ISIN match, return the first details link
+            # No exact ISIN match — don't return wrong result
             if links_data:
-                href = links_data[0].get('href', '')
-                if "/issue/details" in href:
-                    parts = href.split("/issue/details")
-                    if len(parts) > 1:
-                        hex_part = parts[1].split("/")[0].split("?")[0]
-                        logger.debug(f"Returning first hex code found: {hex_part}")
-                        return hex_part
+                logger.warning(f"No exact ISIN match found in {len(links_data)} search results")
 
         except Exception as e:
             logger.warning(f"JavaScript link extraction failed: {e}")
@@ -283,35 +288,20 @@ class FinamClient:
                             logger.debug(f"Found hex code {hex_part} from onclick match")
                             return hex_part
 
-            # If no ISIN match, return first from onclick
+            # No exact ISIN match in onclick results
             if onclick_data:
-                onclick = onclick_data[0].get('onclick', '')
-                if "/issue/details" in onclick:
-                    parts = onclick.split("/issue/details")
-                    if len(parts) > 1:
-                        hex_part = parts[1].split("/")[0].split("?")[0].strip("'\"")
-                        logger.debug(f"Returning first hex code from onclick: {hex_part}")
-                        return hex_part
+                logger.warning(f"No exact ISIN match found in {len(onclick_data)} onclick results")
 
         except Exception as e:
             logger.warning(f"JavaScript onclick extraction failed: {e}")
 
-        # Method 3: Fallback to query_selector_all
-        links = self._page.query_selector_all("a[href*='details']")
-        for link in links:
-            href = link.get_attribute("href") or ""
-            if "/issue/details" in href:
-                parts = href.split("/issue/details")
-                if len(parts) > 1:
-                    hex_part = parts[1].split("/")[0].split("?")[0]
-                    logger.debug(f"Found hex code {hex_part} from query_selector")
-                    return hex_part
-
+        # Method 3 removed: was returning wrong ISIN as fallback
+        logger.warning(f"Could not find hex code for ISIN {isin} in search results")
         return None
 
     def get_bond_card(self, isin: str, hex_code: str) -> Optional[BondCard]:
         """Navigate to bond card page and extract document links."""
-        url = self.config.finam_card_urlTemplate.format(hex_code=hex_code)
+        url = self.config.finam_card_url_template.format(hex_code=hex_code)
         logger.info(f"Opening bond card: {url}")
 
         try:
@@ -435,9 +425,7 @@ class FinamClient:
 
     def download_file(self, url: str, dest_path: Path) -> bool:
         """Download a file from st.finam.ru (no anti-bot)."""
-        try:
-            import httpx
-        except ImportError:
+        if _httpx is None:
             logger.error("httpx not installed. Run: pip install httpx")
             return False
 
@@ -452,7 +440,7 @@ class FinamClient:
         }
 
         try:
-            with httpx.Client(headers=headers, timeout=60, follow_redirects=True) as client:
+            with _httpx.Client(headers=headers, timeout=60, follow_redirects=True) as client:
                 with client.stream("GET", url) as response:
                     response.raise_for_status()
                     with open(dest_path, "wb") as f:

@@ -129,6 +129,38 @@ def unzip_if_needed(pdf_path):
     return pdf_path
 
 
+
+def build_covenant(existing_count, clause=None, event=None, section_title="", is_provided=True):
+    """Build a single covenant dict from clause/event data."""
+    MAX_QUOTE_LEN = 500
+    MAX_COND_LEN = 1000
+
+    if event:
+        section = f"п. {clause.section}, {event.event_number}" if clause and clause.section else event.event_number
+        return {
+            "number": existing_count + 1,
+            "category": "Досрочное погашение по требованию владельцев",
+            "essence": event.title,
+            "document": "Решение о выпуске",
+            "section": section,
+            "page": event.page or (clause.page if clause else 0),
+            "quote": event.full_text[:MAX_QUOTE_LEN],
+            "is_provided": True,
+            "conditions": event.full_text[:MAX_COND_LEN],
+        }
+    else:
+        return {
+            "number": existing_count + 1,
+            "category": "Досрочное погашение по требованию владельцев",
+            "essence": section_title or (clause.section_title if clause else ""),
+            "document": "Решение о выпуске",
+            "section": f"п. {clause.section}" if clause and clause.section else "",
+            "page": clause.page if clause else 0,
+            "quote": (clause.full_text[:MAX_QUOTE_LEN] if clause else ""),
+            "is_provided": is_provided,
+            "conditions": (clause.conditions[:MAX_COND_LEN] if clause and clause.conditions else ""),
+        }
+
 def process_isin(isin, client, pdf_parser, config):
     """Process a single ISIN: search, download, parse."""
     logger = logging.getLogger(__name__)
@@ -202,34 +234,14 @@ def process_isin(isin, client, pdf_parser, config):
                 continue
 
             if clause.events:
-                # Multiple events = multiple covenants
                 for event in clause.events:
-                    covenant = {
-                        "number": len(result["covenants"]) + 1,
-                        "category": "Досрочное погашение по требованию владельцев",
-                        "essence": event.title,
-                        "document": "Решение о выпуске",
-                        "section": f"п. {clause.section}, {event.event_number}" if clause.section else event.event_number,
-                        "page": clause.page,
-                        "quote": event.full_text[:500],
-                        "is_provided": True,
-                        "conditions": event.full_text[:1000],
-                    }
-                    result["covenants"].append(covenant)
+                    result["covenants"].append(
+                        build_covenant(len(result["covenants"]), clause=clause, event=event)
+                    )
             else:
-                # Single covenant (no events parsed)
-                covenant = {
-                    "number": len(result["covenants"]) + 1,
-                    "category": "Досрочное погашение по требованию владельцев",
-                    "essence": clause.section_title,
-                    "document": "Решение о выпуске",
-                    "section": f"п. {clause.section}" if clause.section else "",
-                    "page": clause.page,
-                    "quote": clause.full_text[:500],
-                    "is_provided": clause.is_provided,
-                    "conditions": clause.conditions[:1000] if clause.conditions else "",
-                }
-                result["covenants"].append(covenant)
+                result["covenants"].append(
+                    build_covenant(len(result["covenants"]), clause=clause)
+                )
 
         result["total_covenants"] = len(result["covenants"])
 

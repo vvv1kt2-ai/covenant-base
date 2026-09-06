@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config import Config
 from pdf_parser import PDFParser
+from parser import build_covenant
 
 config = Config()
 parser = PDFParser(config)
@@ -20,7 +21,7 @@ skipped = 0
 
 for r in data:
     isin = r["isin"]
-    pdf_path = Path("downloads") / isin / "decision.pdf"
+    pdf_path = config.downloads_dir / isin / "decision.pdf"
 
     if not pdf_path.exists():
         skipped += 1
@@ -44,31 +45,13 @@ for r in data:
 
         if clause.events:
             for event in clause.events:
-                covenant = {
-                    "number": len(r["covenants"]) + 1,
-                    "category": "Досрочное погашение по требованию владельцев",
-                    "essence": event.title,
-                    "document": "Решение о выпуске",
-                    "section": f"п. {clause.section}, {event.event_number}" if clause.section else event.event_number,
-                    "page": clause.page,
-                    "quote": event.full_text[:500],
-                    "is_provided": True,
-                    "conditions": event.full_text[:1000],
-                }
-                r["covenants"].append(covenant)
+                r["covenants"].append(
+                    build_covenant(len(r["covenants"]), clause=clause, event=event)
+                )
         else:
-            covenant = {
-                "number": len(r["covenants"]) + 1,
-                "category": "Досрочное погашение по требованию владельцев",
-                "essence": clause.section_title,
-                "document": "Решение о выпуске",
-                "section": f"п. {clause.section}" if clause.section else "",
-                "page": clause.page,
-                "quote": clause.full_text[:500],
-                "is_provided": clause.is_provided,
-                "conditions": clause.conditions[:1000] if clause.conditions else "",
-            }
-            r["covenants"].append(covenant)
+            r["covenants"].append(
+                build_covenant(len(r["covenants"]), clause=clause)
+            )
 
     r["total_covenants"] = len(r["covenants"])
     covenant_count += r["total_covenants"]
