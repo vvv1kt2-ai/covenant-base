@@ -407,18 +407,36 @@ class PDFParser:
         # --- Pattern 5: Plain-text triggers ---
         # "в случае делистинга", "в случае нарушения" etc.
         plain_events = self._extract_plain_text_triggers(section_text)
-        if plain_events:
-            # Merge: existing events + plain-text triggers
+
+        # --- Single-bullet scan: catch lone bullets with event keywords ---
+        # Pattern 4 requires >=2 bullets, so single bullets are missed.
+        # Scan all bullets and pick up any with event keywords that aren't disclosure.
+        bullet_single_pattern = re.compile(
+            r"(?:^|\n)\s*[✓✔•◆▪\-–—\uf0fc]\s+(.+?)(?=(?:\n\s*[✓✔•◆▪\-–—\uf0fc]\s)|\Z)",
+            re.DOTALL | re.IGNORECASE,
+        )
+        single_bullet_events = []
+        for m in bullet_single_pattern.finditer(section_text):
+            bullet_text = self._clean_event_text(m.group(1))
+            if self._is_disclosure_or_procedural(bullet_text):
+                continue
+            if any(kw in bullet_text.lower() for kw in _EVENT_KEYWORDS):
+                title = self._extract_event_title(bullet_text)
+                single_bullet_events.append(CovenantEvent(
+                    event_number="0", title=title,
+                    full_text=bullet_text, page=0,
+                ))
+
+        # Merge all: plain-text triggers + single bullets
+        if plain_events or single_bullet_events:
             all_events = events.copy() if events else []
-            for pe in plain_events:
-                # Avoid duplicates (check overlap in first 50 chars of title)
+            for pe in plain_events + single_bullet_events:
                 if not any(
                     pe.title.lower()[:50] in ev.title.lower()
                     or ev.title.lower()[:50] in pe.title.lower()
                     for ev in all_events
                 ):
                     all_events.append(pe)
-            # Re-number
             for idx, ev in enumerate(all_events):
                 ev.event_number = str(idx + 1)
             if all_events:
