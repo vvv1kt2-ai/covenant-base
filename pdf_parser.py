@@ -1,4 +1,4 @@
-﻿"""PDF parsing for bond emission documents using pdfplumber."""
+"""PDF parsing for bond emission documents using pdfplumber."""
 import logging
 import re
 from dataclasses import dataclass, field
@@ -22,29 +22,56 @@ _EVENT_KEYWORDS = [
 # Words that indicate a date definition, not a real event
 _DATE_DEF_WORDS = ["является", "считается", "наступает", "возникает"]
 
+# Keywords that indicate disclosure/reporting/procedural text, NOT covenant events
+_DISCLOSURE_KEYWORDS = [
+    "в ленте новостей",
+    "ленте новостей",
+    "порядок раскрытия",
+    "раскрывается эмитентом",
+    "эмитент раскрывает",
+    "информация об итогах",
+    "сведения о количестве",
+    "информация о возникновении",
+    "информация о прекращении",
+]
+
+# Plain-text trigger patterns (for sections that state covenants as flowing text)
+_PLAIN_TRIGGER_PATTERNS = [
+    re.compile(r"в\s+случа[ея]\s+(делистинг\w+)", re.IGNORECASE),
+    re.compile(r"в\s+случа[ея]\s+(нарушен\w+\s+эмитент\w+\s+срок\w+)", re.IGNORECASE),
+    re.compile(
+        r"в\s+случа[ея]\s+(снижени\w+|ликвидаци\w+|реорганизац\w+|конкурсн\w+|банкротств\w+|установлен\w+\s+существенн\w+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"в\s+случа[ея]\s+(неопубликовани\w+|невыплат\w+|неперечислен\w+)",
+        re.IGNORECASE,
+    ),
+]
+
 
 @dataclass
 class CovenantEvent:
     """A single covenant event (trigger condition) from section 5.6.1."""
-    event_number: str  # e.g. "1", "2", "Событие 1"
-    title: str  # short title extracted from the event
-    full_text: str  # complete text of this event
-    page: int  # page number where found
+    event_number: str
+    title: str
+    full_text: str
+    page: int
 
 
 @dataclass
 class RedemptionClause:
     """Parsed redemption clause from a bond document."""
-    section: str  # e.g. "5.6.1"
+    section: str
     section_title: str
-    full_text: str  # complete text of the section
+    full_text: str
     page: int
     is_provided: bool
     conditions: str = ""
     program_reference: Optional[str] = None
     events: List[CovenantEvent] = field(default_factory=list)
-    has_federal_law_only: bool = False  # True if no extractable covenants
-    needs_program_check: bool = False  # True if Program must be checked manually
+    has_federal_law_only: bool = False
+    needs_program_check: bool = False
 
 
 @dataclass
@@ -83,12 +110,10 @@ class PDFParser:
                     logger.warning(f"No text layer in {pdf_path.name}")
                     return result
 
-                # Search for section 5.6.1
                 clause = self._find_redemption_clause(full_text, "5.6.1")
                 if clause:
                     result.redemption_clauses.append(clause)
                 else:
-                    # Fallback: "не предусмотрена" without explicit section number
                     fallback = self._find_not_provided_fallback(full_text)
                     if fallback:
                         result.redemption_clauses.append(fallback)
@@ -132,6 +157,54 @@ class PDFParser:
         ]
         return any(re.search(p, text) for p in patterns)
 
+    def _is_disclosure_or_procedural(self, text: str) -> bool:
+        """Check if text is a disclosure/reporting procedure, NOT a covenant event."""
+        text_lower = text.lower().strip()
+
+        # Direct check: starts with disclosure keywords
+        for kw in _DISCLOSURE_KEYWORDS:
+            if text_lower.startswith(kw):
+                return True
+
+        # Check if the text is primarily about disclosure timing
+        if re.match(
+            r"(?:в\s+ленте\s+новостей|раскрывает\w*|раскрывается)\b.*"
+            r"не\s+позднее\s+\d+",
+            text_lower,
+        ):
+            has_event = any(kw in text_lower for kw in _EVENT_KEYWORDS)
+            if not has_event:
+                return True
+
+        return False
+
+    def _extract_plain_text_triggers(self, section_text: str) -> List[CovenantEvent]:
+        """Extract covenants stated as plain text (not in numbered/bullet lists)."""
+        events = []
+        seen_titles = set()
+
+        for pattern in _PLAIN_TRIGGER_PATTERNS:
+            for m in pattern.finditer(section_text):
+                trigger_name = m.group(1).strip()
+
+                start = max(0, m.start() - 300)
+                end = min(len(section_text), m.end() + 300)
+                event_text = self._clean_event_text(section_text[start:end])
+
+                title = f"Досрочное погашение в случае {trigger_name}"
+                if title in seen_titles:
+                    continue
+                seen_titles.add(title)
+
+                events.append(CovenantEvent(
+                    event_number=str(len(events) + 1),
+                    title=title,
+                    full_text=event_text,
+                    page=0,
+                ))
+
+        return events
+
     def _find_redemption_clause(self, text: str, section_number: str) -> Optional[RedemptionClause]:
         """Find section 5.6.1 and parse its contents."""
         section_pattern = re.compile(
@@ -149,7 +222,6 @@ class PDFParser:
 
         raw_section = match.group(0).strip()
 
-        # Extract title
         title_match = re.match(
             rf"{re.escape(section_number)}[\.\s]*(.*?)(?:\n|$)",
             raw_section, re.IGNORECASE,
@@ -157,12 +229,9 @@ class PDFParser:
         section_title = title_match.group(1).strip() if title_match else ""
         page = self._find_page_number(text, match.start())
 
-        # --- Determine if provided ---
-        # Check first 5 lines for the defining statement
         defining_text = "\n".join(raw_section.split("\n")[:5]).lower()
 
         if self._is_not_provided(defining_text):
-            # NOT PROVIDED — mark as 0 covenants
             program_ref = self._find_program_reference(raw_section)
             has_program_ref = bool(re.search(
                 r"программ[аы]\s+облигаций|пункт[а-я]*\s+\d+\.\d+.*программ|п\.\s*\d+\.\d+",
@@ -176,18 +245,14 @@ class PDFParser:
                 needs_program_check=has_program_ref,
             )
 
-        # --- PROVIDED — extract individual events ---
         events = self._extract_events(raw_section)
 
         if not events:
-            # "Предусмотрена" but no structured events found —
-            # treat the whole section as a single covenant
             program_ref = self._find_program_reference(raw_section)
             has_program_ref = bool(re.search(
                 r"программ[аы]\s+облигаций|пункт[а-я]*\s+\d+\.\d+.*программ|п\.\s*\d+\.\d+",
                 raw_section.lower()
             ))
-            # Create a single event from the defining statement
             first_sentences = re.split(r'(?<=[.!?])\s+', raw_section[:500])
             title = first_sentences[0] if first_sentences else section_title
             if len(title) > 200:
@@ -216,16 +281,15 @@ class PDFParser:
         Extract individual covenant events from section 5.6.1 text.
         Priority:
           1. "Событие досрочного погашения ... – N:" (formal pattern)
-          2. "Событие N:" at START of line only (not inline references)
+          2. "Событие N:" at START of line only
           3. Numbered items "1) ..." that start with event keywords
           4. Bullet/checkmark items with event keywords
+          5. Plain-text triggers ("в случае делистинга/нарушения/etc.")
+        After extraction, disclosure/procedural items are filtered out.
         """
         events = []
 
-
-
         # --- Pattern 1: "Событие досрочного погашения ... – N:" ---
-        # This is the most specific — only matches the formal "Событие ... – 1:" pattern
         event_pattern_1 = re.compile(
             r"Событи[ея]\s+досрочного\s+погашени\w+[^:\n]*?[–\-—]\s*(\d+)[\s:]+",
             re.IGNORECASE,
@@ -239,11 +303,11 @@ class PDFParser:
                 start = m.end()
                 end = matches[i + 1].start() if i + 1 < len(matches) else len(section_text)
                 event_text = self._clean_event_text(section_text[start:end])
-                # Skip date definitions
                 first_words = event_text.lower()[:50]
                 if any(w in first_words for w in _DATE_DEF_WORDS):
                     continue
-                # Keep only first per number
+                if self._is_disclosure_or_procedural(event_text):
+                    continue
                 if num in seen_nums:
                     continue
                 seen_nums[num] = True
@@ -256,9 +320,6 @@ class PDFParser:
                 return events
 
         # --- Pattern 2: "Событие N:" at START of line, colon required ---
-        # Only "Событие" (nominative), NOT "События" (genitive — used in "Датой наступления События 1")
-        # Filter out date definitions: "Событие 1: является первый рабочий день..."
-
         event_pattern_2 = re.compile(
             r"(?:^|\n)\s*Событие\s+(\d+)\s*[:]\s*(.+?)(?=(?:\n\s*Событие\s+\d+\s*[:])|\Z)",
             re.DOTALL | re.IGNORECASE,
@@ -270,11 +331,11 @@ class PDFParser:
             for m in matches:
                 num = m.group(1)
                 event_text = self._clean_event_text(m.group(2))
-                # Skip date definitions ("Событие 1: является первый рабочий день...")
                 first_words = event_text.lower()[:50]
                 if any(w in first_words for w in _DATE_DEF_WORDS):
                     continue
-                # Keep only first event per number (skip duplicates)
+                if self._is_disclosure_or_procedural(event_text):
+                    continue
                 if num in seen_nums:
                     continue
                 seen_nums[num] = True
@@ -287,7 +348,6 @@ class PDFParser:
                 return events
 
         # --- Pattern 3: Numbered list "1) ..." / "1. ..." ---
-        # More strict: only items at line start, no sub-numbering (1.1, 1.2)
         numbered_pattern = re.compile(
             r"(?:^|\n)\s*(\d+)\s*[)\.]+\s+(.+?)(?=(?:\n\s*\d+\s*[)\.]+\s)|\Z)",
             re.DOTALL | re.IGNORECASE,
@@ -295,19 +355,19 @@ class PDFParser:
         matches = list(numbered_pattern.finditer(section_text))
 
         if len(matches) >= 2:
-            # Verify these look like separate events (start with event-like keywords)
             event_like = 0
             for m in matches:
                 text_start = m.group(2).lower()[:100]
                 if any(kw in text_start for kw in _EVENT_KEYWORDS):
                     event_like += 1
 
-            # At least half must look like events
             if event_like >= len(matches) * 0.5:
                 seen_nums = {}
                 for m in matches:
                     num = m.group(1)
                     event_text = self._clean_event_text(m.group(2))
+                    if self._is_disclosure_or_procedural(event_text):
+                        continue
                     title = self._extract_event_title(event_text)
                     if title.strip() and num not in seen_nums:
                         seen_nums[num] = True
@@ -320,21 +380,49 @@ class PDFParser:
 
         # --- Pattern 4: Bullet/checkmark items "✓ ..." or "- ..." ---
         bullet_pattern = re.compile(
-            r"(?:^|\n)\s*[✓✔•◆▪\-–—]\s+(.+?)(?=(?:\n\s*[✓✔•◆▪\-–—]\s)|\Z)",
+            r"(?:^|\n)\s*[✓✔•◆▪\-–—\uf0fc]\s+(.+?)(?=(?:\n\s*[✓✔•◆▪\-–—\uf0fc]\s)|\Z)",
             re.DOTALL | re.IGNORECASE,
         )
         matches = list(bullet_pattern.finditer(section_text))
         if len(matches) >= 2:
+            raw_events = []
             for i, m in enumerate(matches):
                 event_text = self._clean_event_text(m.group(1))
                 title = self._extract_event_title(event_text)
+                is_disclosure = self._is_disclosure_or_procedural(event_text)
                 if title.strip():
-                    events.append(CovenantEvent(
+                    raw_events.append((CovenantEvent(
                         event_number=str(i + 1), title=title,
                         full_text=event_text, page=0,
-                    ))
-            if events:
-                return events
+                    ), is_disclosure))
+            # Filter out disclosure items
+            real_events = [ev for ev, disc in raw_events if not disc]
+            # Re-number
+            for idx, ev in enumerate(real_events):
+                ev.event_number = str(idx + 1)
+            if len(real_events) >= 2:
+                return real_events
+            events = real_events  # Keep for potential merge with plain-text
+
+        # --- Pattern 5: Plain-text triggers ---
+        # "в случае делистинга", "в случае нарушения" etc.
+        plain_events = self._extract_plain_text_triggers(section_text)
+        if plain_events:
+            # Merge: existing events + plain-text triggers
+            all_events = events.copy() if events else []
+            for pe in plain_events:
+                # Avoid duplicates (check overlap in first 50 chars of title)
+                if not any(
+                    pe.title.lower()[:50] in ev.title.lower()
+                    or ev.title.lower()[:50] in pe.title.lower()
+                    for ev in all_events
+                ):
+                    all_events.append(pe)
+            # Re-number
+            for idx, ev in enumerate(all_events):
+                ev.event_number = str(idx + 1)
+            if all_events:
+                return all_events
 
         # --- Deduplicate: keep only first event per number ---
         if events:
@@ -351,20 +439,16 @@ class PDFParser:
 
     def _clean_event_text(self, text: str) -> str:
         """Clean event text: remove trailing boilerplate phrases."""
-        # Remove "считается наступившим" and similar trailing phrases
         text = re.sub(
             r"\s*считается\s+наступившим.*$",
             "", text, flags=re.DOTALL | re.IGNORECASE,
         )
-        # Remove page markers
         text = re.sub(r"\s*---\s*PAGE\s+\d+\s*---\s*", " ", text)
-        # Clean whitespace
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
     def _extract_event_title(self, event_text: str) -> str:
         """Extract a short title from event text."""
-        # Take first sentence
         first_sentence = re.match(r"(.+?)(?:\.|;|\n\n|\Z)", event_text)
         title = first_sentence.group(1).strip() if first_sentence else event_text[:150].strip()
         title = re.sub(r"\s+", " ", title)
