@@ -1,0 +1,7 @@
+{
+  "ЭНЕРГОТЕХСЕРВИС": {"company_id": "38026", "source": "known", "program_number": "4-00490-R-001P-02E"},
+  "МВ ФИНАНС": {"company_id": "38369", "source": "edisclosure_search", "program_number": "4-00590-R-001P-02E"},
+  "ТАЛАН-ФИНАНС": {"company_id": "37631", "source": "edisclosure_search", "program_number": "4-00416-R-001P-02E"},
+  "ЭКОНОМЛИЗИНГ": {"company_id": "37873", "source": "edisclosure_search", "program_number": "4-00461-R-001P-02E"},
+  "РОЛЬФ": {"company_id": "37542", "source": "edisclosure_search", "program_number": "4-00406-R-001P-02E"}
+}

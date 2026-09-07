@@ -1,17 +1,21 @@
-﻿downloads/
+downloads/
 __pycache__/
 *.pyc
 *.log
-*.xlsx
 *.html
 *_files/
-results.json
 check_out*.txt
 template_dump.txt
 1.txt
 *.docx
-*.zip
 fix_*.py
 test_*.py
 show_*.py
 patch_*.py
+
+# Large generated files
+*.zip
+
+# Data files - track these explicitly with git add -f if needed
+results.json
+*.xlsx

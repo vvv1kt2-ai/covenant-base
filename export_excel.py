@@ -73,9 +73,14 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
         parse_errors = r.get("parse_errors", [])
 
         # --- Error ISINs: mark for manual check ---
-        if parse_errors and num_covenants == 0:
+        has_manual_check = r.get("requires_manual_check", False)
+        error_reason = r.get("manual_check_reason", "")
+        if (parse_errors and num_covenants == 0) or has_manual_check:
             total_errors += 1
-            error_msg = "; ".join(parse_errors)[:300]
+            if has_manual_check:
+                error_msg = error_reason or "Программа облигаций скачана, требует ручной проверки"
+            else:
+                error_msg = "; ".join(parse_errors)[:300]
 
             values = [
                 issuer, issue_name, isin, rating,
