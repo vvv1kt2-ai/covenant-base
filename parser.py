@@ -131,35 +131,13 @@ def unzip_if_needed(pdf_path):
 
 
 def build_covenant(existing_count, clause=None, event=None, section_title="", is_provided=True):
-    """Build a single covenant dict from clause/event data."""
-    MAX_QUOTE_LEN = 500
-    MAX_COND_LEN = 1000
+    """Build a single covenant dict from clause/event data.
 
-    if event:
-        section = f"п. {clause.section}, {event.event_number}" if clause and clause.section else event.event_number
-        return {
-            "number": existing_count + 1,
-            "category": "Досрочное погашение по требованию владельцев",
-            "essence": event.title,
-            "document": "Решение о выпуске",
-            "section": section,
-            "page": event.page or (clause.page if clause else 0),
-            "quote": event.full_text[:MAX_QUOTE_LEN],
-            "is_provided": True,
-            "conditions": event.full_text[:MAX_COND_LEN],
-        }
-    else:
-        return {
-            "number": existing_count + 1,
-            "category": "Досрочное погашение по требованию владельцев",
-            "essence": section_title or (clause.section_title if clause else ""),
-            "document": "Решение о выпуске",
-            "section": f"п. {clause.section}" if clause and clause.section else "",
-            "page": clause.page if clause else 0,
-            "quote": (clause.full_text[:MAX_QUOTE_LEN] if clause else ""),
-            "is_provided": is_provided,
-            "conditions": (clause.conditions[:MAX_COND_LEN] if clause and clause.conditions else ""),
-        }
+    NOTE: Canonical implementation is in covenant_models.py.
+    This is kept for backward compatibility; callers should prefer covenant_models.
+    """
+    from covenant_models import build_covenant as _build
+    return _build(existing_count, clause, event, section_title, is_provided)
 
 def process_isin(isin, client, pdf_parser, config):
     """Process a single ISIN: search, download, parse."""
@@ -295,6 +273,17 @@ def main():
 
     if args.isin:
         isins = [args.isin.upper()]
+    elif args.retry_errors and not args.input:
+        # --retry-errors without --input: load error ISINs from results.json
+        output_path = Path(args.output)
+        if output_path.exists():
+            with open(output_path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            isins = [r["isin"] for r in existing if r.get("parse_errors")]
+            logger.info(f"Retry mode: loaded {len(isins)} error ISINs from {args.output}")
+        else:
+            logger.error("--retry-errors without --input requires existing results.json")
+            sys.exit(1)
     else:
         isins = load_isin_list(Path(args.input))
 

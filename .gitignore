@@ -12,6 +12,11 @@ fix_*.py
 test_*.py
 show_*.py
 patch_*.py
+check_*.py
+inspect_*.py
+dedup_*.py
+remerge_*.py
+debug_*.py
 
 # Large generated files
 *.zip

@@ -33,6 +33,7 @@ _DISCLOSURE_KEYWORDS = [
     "сведения о количестве",
     "информация о возникновении",
     "информация о прекращении",
+    "нераскрытие",
 ]
 
 # Plain-text trigger patterns (for sections that state covenants as flowing text)
