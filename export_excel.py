@@ -1,4 +1,4 @@
-﻿"""Export results.json to Excel following the template format."""
+"""Export results.json to Excel following the template format."""
 import json
 from pathlib import Path
 
@@ -30,6 +30,8 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
     link_font = Font(color="0563C1", underline="single")
     warn_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
     warn_font = Font(bold=True, color="C00000")
+    # Light green tint for program-sourced covenants
+    prog_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
 
     # --- Headers ---
     headers = [
@@ -67,6 +69,7 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
         num_covenants = r.get("total_covenants", len(covenants))
         decision_url = r.get("decision_url", "")
         filename = decision_url.split("/")[-1] if decision_url else ""
+        program_url = r.get("program_url", "")
         parse_errors = r.get("parse_errors", [])
 
         # --- Error ISINs: mark for manual check ---
@@ -111,6 +114,7 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
 
             for i, cov in enumerate(covenants):
                 is_provided = cov.get("is_provided", False)
+                is_from_program = "Программа" in cov.get("document", "")
 
                 if is_provided:
                     category = "Информационный (отчётность эмитента) +\nРаскрытие отчётности эмитента"
@@ -125,6 +129,15 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
                 if len(quote) > 500:
                     quote = quote[:500] + "\u2026"
 
+                # File: show program filename for program-sourced covenants
+                if is_from_program and program_url:
+                    file_name = program_url.split("/")[-1].split("?")[0]
+                else:
+                    file_name = filename
+
+                # Source URL: program or decision
+                source_url = program_url if (is_from_program and program_url) else decision_url
+
                 values = [
                     issuer if i == 0 else "",
                     issue_name if i == 0 else "",
@@ -137,21 +150,24 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
                     cov.get("document", ""),
                     section,
                     page,
-                    filename,
+                    file_name,
                     quote,
-                    decision_url,
+                    source_url,
                 ]
 
                 for col_idx, value in enumerate(values, 1):
                     cell = ws.cell(row=row, column=col_idx, value=value)
                     cell.alignment = wrap
                     cell.border = thin_border
+                    # Green tint for program-sourced covenants
+                    if is_from_program:
+                        cell.fill = prog_fill
 
-                # Hyperlink
-                if decision_url:
+                # Hyperlink to source
+                if source_url:
                     link_cell = ws.cell(row=row, column=14)
-                    link_cell.hyperlink = decision_url
-                    link_cell.value = decision_url
+                    link_cell.hyperlink = source_url
+                    link_cell.value = source_url
                     link_cell.font = link_font
 
                 row += 1

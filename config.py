@@ -29,8 +29,8 @@ class Config:
     captcha_timeout: int = 120_000  # ms — time to wait for manual CAPTCHA solve
 
     # Rate limiting
-    min_delay: float = 3.0  # seconds between requests
-    max_delay: float = 8.0  # seconds between requests
+    min_delay: float = 20.0  # seconds between requests (increased for anti-bot)
+    max_delay: float = 45.0  # seconds between requests
 
     # Block detection
     block_cooldown_seconds: int = 300  # pause for 5 minutes if blocked

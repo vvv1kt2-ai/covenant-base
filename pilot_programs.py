@@ -62,8 +62,13 @@ def main():
             logger.info(f"Issuer: {existing.get('issuer', '?')}")
             logger.info(f"Decision covenants: {existing.get('total_covenants', 0)}")
 
-            # Search for ISIN to get hex_code
-            hex_code = client.search_by_isin(isin)
+            # Search for ISIN to get hex_code (pass issuer name as fallback match)
+            issuer_name = existing.get('issuer', '')
+            hex_code = client.search_by_isin(isin, issuer_name)
+            if not hex_code:
+                # Fallback: search by issuer name directly
+                logger.info(f"ISIN search failed, trying by issuer name: {issuer_name}")
+                hex_code = client.search_by_name(issuer_name)
             if not hex_code:
                 logger.warning(f"ISIN {isin} not found on Finam")
                 continue

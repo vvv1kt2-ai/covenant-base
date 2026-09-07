@@ -162,11 +162,13 @@ class FinamClient:
 
         time.sleep(1)
 
-    def search_by_isin(self, isin: str) -> Optional[str]:
+    def search_by_isin(self, isin: str, issuer_name: str = "") -> Optional[str]:
         """
         Search for a bond by ISIN and return the hex code from the card URL.
         Returns None if not found.
         Retries up to 3 times. Handles IP blocking with cooldown.
+
+        If issuer_name is provided, it's used as a secondary match criterion.
         """
         # Check if we're potentially blocked
         self._check_block()
@@ -196,7 +198,7 @@ class FinamClient:
             self._wait_for_captcha_resolution()
 
         for attempt in range(3):
-            hex_code = self._extract_hex_code_from_results(isin)
+            hex_code = self._extract_hex_code_from_results(isin, issuer_name)
 
             if hex_code:
                 logger.info(f"Found hex code {hex_code} for ISIN {isin}")
@@ -212,15 +214,70 @@ class FinamClient:
         self._random_delay()
         return None
 
-    def _extract_hex_code_from_results(self, isin: str) -> Optional[str]:
+    def search_by_name(self, name: str) -> Optional[str]:
+        """
+        Search for a bond by issuer name and return the hex code from the card URL.
+        Returns None if not found.
+        Retries up to 3 times. Handles IP blocking with cooldown.
+        """
+        self._check_block()
+
+        url = f"{self.config.finam_search_url}?emitterCustomName={name}"
+        logger.info(f"Searching by name '{name}': {url}")
+
+        try:
+            self._page.goto(url, timeout=self.config.browser_timeout, wait_until="domcontentloaded")
+        except Exception as e:
+            error_str = str(e).lower()
+            if "timed_out" in error_str or "err_connection" in error_str or "err_aborted" in error_str:
+                self._consecutive_errors += 1
+                logger.warning(
+                    f"Connection error for name search '{name}' "
+                    f"(consecutive: {self._consecutive_errors}): {e}"
+                )
+                if self._consecutive_errors >= self.config.max_consecutive_errors:
+                    self._handle_block()
+                return None
+            raise
+
+        self._wait_for_servicepipe()
+
+        if self._check_captcha():
+            logger.warning("CAPTCHA detected during search. Waiting for manual resolution...")
+            self._wait_for_captcha_resolution()
+
+        for attempt in range(3):
+            hex_code = self._extract_hex_code_from_results("", name)
+
+            if hex_code:
+                logger.info(f"Found hex code {hex_code} for name '{name}'")
+                self._consecutive_errors = 0
+                self._random_delay()
+                return hex_code
+
+            if attempt < 2:
+                logger.info(f"No results on attempt {attempt+1}, retrying (reload page)...")
+                time.sleep(3)
+
+        logger.warning(f"No results found for name '{name}'")
+        self._random_delay()
+        return None
+
+    def _extract_hex_code_from_results(self, isin: str, issuer_name: str = "") -> Optional[str]:
         """
         Extract the bond hex code from search results page.
 
         The search results contain links like:
         /issue/details00007/default.asp
         /issue/details048A2/default.asp
+
+        Matching strategy:
+        1. ISIN in link text or href
+        2. ISIN in parent row/table cell text
+        3. Issuer name in link text (for name-based search)
+        4. Single-result shortcut (if only 1 details link, use it)
         """
-        # Method 1: Use JavaScript to find all links on the page
+        # Method 1: Use JavaScript to find all links with row context
         try:
             links_data = self._page.evaluate("""
                 () => {
@@ -230,28 +287,64 @@ class FinamClient:
                         const href = link.href || '';
                         const text = link.innerText || '';
                         if (href.includes('details')) {
-                            results.push({href: href, text: text});
+                            // Get parent row/cell text for context
+                            let rowText = '';
+                            const row = link.closest('tr') || link.closest('div') || link.parentElement;
+                            if (row) {
+                                rowText = row.innerText || '';
+                            }
+                            results.push({href: href, text: text, rowText: rowText});
                         }
                     }
                     return results;
                 }
             """)
-            logger.debug(f"Found {len(links_data)} links with 'details' in href")
+            logger.info(f"Found {len(links_data)} links with 'details' in href")
+            for i, link_info in enumerate(links_data):
+                logger.info(f"  [{i}] text={link_info.get('text', '')!r} href={link_info.get('href', '')[-50:]}")
+                row_preview = link_info.get('rowText', '')[:200]
+                logger.info(f"       rowText={row_preview!r}")
 
-            for link_info in links_data:
-                href = link_info.get('href', '')
-                text = link_info.get('text', '')
+            # Pass 1: exact ISIN match in text or href
+            if isin:
+                for link_info in links_data:
+                    href = link_info.get('href', '')
+                    text = link_info.get('text', '')
+                    row_text = link_info.get('rowText', '')
 
-                # Check if ISIN matches text or href
-                if isin.upper() in text.upper() or isin.upper() in href.upper():
-                    if "/issue/details" in href:
-                        parts = href.split("/issue/details")
-                        if len(parts) > 1:
-                            hex_part = parts[1].split("/")[0].split("?")[0]
-                            logger.debug(f"Found hex code {hex_part} from link text/href match")
-                            return hex_part
+                    if isin.upper() in text.upper() or isin.upper() in href.upper() or isin.upper() in row_text.upper():
+                        if "/issue/details" in href:
+                            parts = href.split("/issue/details")
+                            if len(parts) > 1:
+                                hex_part = parts[1].split("/")[0].split("?")[0]
+                                logger.info(f"Found hex code {hex_part} from ISIN match")
+                                return hex_part
 
-            # No exact ISIN match — don't return wrong result
+            # Pass 2: issuer name match (for name-based search)
+            if issuer_name:
+                for link_info in links_data:
+                    href = link_info.get('href', '')
+                    text = link_info.get('text', '')
+                    row_text = link_info.get('rowText', '')
+
+                    if issuer_name.upper() in text.upper() or issuer_name.upper() in row_text.upper():
+                        if "/issue/details" in href:
+                            parts = href.split("/issue/details")
+                            if len(parts) > 1:
+                                hex_part = parts[1].split("/")[0].split("?")[0]
+                                logger.info(f"Found hex code {hex_part} from issuer name match ({issuer_name!r})")
+                                return hex_part
+
+            # Pass 3: if only 1 details link, use it (search is specific enough)
+            if len(links_data) == 1:
+                href = links_data[0].get('href', '')
+                if "/issue/details" in href:
+                    parts = href.split("/issue/details")
+                    if len(parts) > 1:
+                        hex_part = parts[1].split("/")[0].split("?")[0]
+                        logger.info(f"Found hex code {hex_part} from single-result shortcut")
+                        return hex_part
+
             if links_data:
                 logger.warning(f"No exact ISIN match found in {len(links_data)} search results")
 
@@ -267,35 +360,97 @@ class FinamClient:
                     for (const el of elements) {
                         const onclick = el.getAttribute('onclick') || '';
                         if (onclick.includes('details')) {
-                            results.push({onclick: onclick, text: el.innerText || ''});
+                            let rowText = '';
+                            const row = el.closest('tr') || el.closest('div') || el.parentElement;
+                            if (row) {
+                                rowText = row.innerText || '';
+                            }
+                            results.push({onclick: onclick, text: el.innerText || '', rowText: rowText});
                         }
                     }
                     return results;
                 }
             """)
-            logger.debug(f"Found {len(onclick_data)} elements with 'details' in onclick")
+            logger.info(f"Found {len(onclick_data)} elements with 'details' in onclick")
+            for i, item in enumerate(onclick_data):
+                logger.info(f"  [{i}] text={item.get('text', '')!r} onclick={item.get('onclick', '')[-50:]}")
 
             for item in onclick_data:
                 onclick = item.get('onclick', '')
                 text = item.get('text', '')
+                row_text = item.get('rowText', '')
 
-                # Extract hex code from onclick like "window.location.href = '/issue/details0487B/default.asp'"
                 if "/issue/details" in onclick:
                     parts = onclick.split("/issue/details")
                     if len(parts) > 1:
                         hex_part = parts[1].split("/")[0].split("?")[0].strip("'\"")
-                        if isin.upper() in text.upper():
-                            logger.debug(f"Found hex code {hex_part} from onclick match")
+                        if isin and (isin.upper() in text.upper() or isin.upper() in row_text.upper()):
+                            logger.info(f"Found hex code {hex_part} from onclick ISIN match")
+                            return hex_part
+                        if issuer_name and (issuer_name.upper() in text.upper() or issuer_name.upper() in row_text.upper()):
+                            logger.info(f"Found hex code {hex_part} from onclick issuer name match")
                             return hex_part
 
-            # No exact ISIN match in onclick results
-            if onclick_data:
-                logger.warning(f"No exact ISIN match found in {len(onclick_data)} onclick results")
+            # Single-result shortcut for onclick too
+            if len(onclick_data) == 1:
+                onclick = onclick_data[0].get('onclick', '')
+                if "/issue/details" in onclick:
+                    parts = onclick.split("/issue/details")
+                    if len(parts) > 1:
+                        hex_part = parts[1].split("/")[0].split("?")[0].strip("'\"")
+                        logger.info(f"Found hex code {hex_part} from onclick single-result shortcut")
+                        return hex_part
 
         except Exception as e:
             logger.warning(f"JavaScript onclick extraction failed: {e}")
 
-        # Method 3 removed: was returning wrong ISIN as fallback
+        # Method 3: Full-page ISIN search — find ISIN text anywhere on the page
+        # and associate it with the nearest details link
+        try:
+            page_match = self._page.evaluate("""
+                (searchIsin) => {
+                    // Search entire page body for the ISIN string
+                    const body = document.body ? document.body.innerText : '';
+                    if (!searchIsin || !body.toUpperCase().includes(searchIsin.toUpperCase())) {
+                        return {found: false, bodySnippet: body.substring(0, 500)};
+                    }
+                    // Find all details links and their positions
+                    const links = document.querySelectorAll('a[href*="details"]');
+                    const results = [];
+                    for (const link of links) {
+                        results.push({href: link.href, text: link.innerText || ''});
+                    }
+                    return {found: true, links: results, bodySnippet: body.substring(0, 500)};
+                }
+            """, isin)
+
+            if page_match and page_match.get('found'):
+                logger.info(f"ISIN {isin} found in page text")
+                links = page_match.get('links', [])
+                if len(links) == 1:
+                    href = links[0].get('href', '')
+                    if "/issue/details" in href:
+                        parts = href.split("/issue/details")
+                        if len(parts) > 1:
+                            hex_part = parts[1].split("/")[0].split("?")[0]
+                            logger.info(f"Found hex code {hex_part} from page-text single link")
+                            return hex_part
+                elif links:
+                    # Multiple links — return the first one (search is specific enough)
+                    href = links[0].get('href', '')
+                    if "/issue/details" in href:
+                        parts = href.split("/issue/details")
+                        if len(parts) > 1:
+                            hex_part = parts[1].split("/")[0].split("?")[0]
+                            logger.info(f"Found hex code {hex_part} from page-text first link ({len(links)} total)")
+                            return hex_part
+            else:
+                snippet = (page_match or {}).get('bodySnippet', '')[:200]
+                logger.warning(f"ISIN {isin} not found in page text. Body snippet: {snippet!r}")
+
+        except Exception as e:
+            logger.warning(f"JavaScript page-text search failed: {e}")
+
         logger.warning(f"Could not find hex code for ISIN {isin} in search results")
         return None
 

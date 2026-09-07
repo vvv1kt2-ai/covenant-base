@@ -1,0 +1,434 @@
+[
+  {
+    "isin": "RU000A109HX2",
+    "issuer": "ВУШ-001Р-03",
+    "hex_code": "03CED",
+    "program_url": "https://st.finam.ru/ipo/decision/15597_0_Программа.pdf",
+    "program_pdf": "15597_0_Программа.pdf",
+    "status": "parsed",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10BS76",
+    "issuer": "ВУШ-001Р-04",
+    "hex_code": "04152",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10E6D0",
+    "issuer": "ВУШ-001Р-05",
+    "hex_code": "04538",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10EYU8",
+    "issuer": "ВУШ-001Р-06",
+    "hex_code": "04539",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10FGU2",
+    "issuer": "ВУШ-001Р-07",
+    "hex_code": "047BF",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10FWY1",
+    "issuer": "ВУШ-001Р-08",
+    "hex_code": "048AB",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10B7H2",
+    "issuer": "АПТЕЧНАЯ СЕТЬ 36,6-002P-02",
+    "hex_code": "0401D",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A109TG2",
+    "issuer": "КАРШЕРИНГ РУССИЯ-001P-04",
+    "hex_code": "03D52",
+    "program_url": "https://st.finam.ru/ipo/decision/15698_0_Программа_001Р.pdf",
+    "program_pdf": "15698_0_Программа_001Р.pdf",
+    "status": "parsed",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10BY52",
+    "issuer": "КАРШЕРИНГ РУССИЯ-001P-06",
+    "hex_code": "0419B",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10CCG7",
+    "issuer": "КАРШЕРИНГ РУССИЯ-001P-07",
+    "hex_code": "04261",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10F512",
+    "issuer": "КАРШЕРИНГ РУССИЯ-001P-08",
+    "hex_code": "04704",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10FQB1",
+    "issuer": "КАРШЕРИНГ РУССИЯ-001P-09",
+    "hex_code": "0482D",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10C6M3",
+    "issuer": "УРАЛКУЗ-001Р-01",
+    "hex_code": "0420B",
+    "program_url": "https://st.finam.ru/ipo/decision/16907_0_Программа.pdf",
+    "program_pdf": "16907_0_Программа.pdf",
+    "status": "parsed",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10D319",
+    "issuer": "УРАЛКУЗ-001Р-02",
+    "hex_code": "04386",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10DBV6",
+    "issuer": "УРАЛКУЗ-001Р-03",
+    "hex_code": "0440A",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10ADJ3",
+    "issuer": "ЭНЕРГОТЕХСЕРВИС-001Р-06",
+    "hex_code": "03EA0",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10BUM9",
+    "issuer": "ЭНЕРГОТЕХСЕРВИС-001Р-07",
+    "hex_code": "0416D",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10BVT2",
+    "issuer": "ЭНЕРГОТЕХСЕРВИС-001Р-08",
+    "hex_code": "0416E",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10EKX1",
+    "issuer": "ЭНЕРГОТЕХСЕРВИС-001Р-09",
+    "hex_code": "045F3",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10ETM5",
+    "issuer": "ЭНЕРГОТЕХСЕРВИС-001Р-10",
+    "hex_code": "046AE",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10FAL4",
+    "issuer": "ИННОВАЦИОННЫЕ СИСТЕМЫ ПОЖАРОБЕЗОПАСНОСТИ-001P-01",
+    "hex_code": "04774",
+    "program_url": "https://st.finam.ru/ipo/decision/18292_0_Программа.pdf",
+    "program_pdf": "18292_0_Программа.pdf",
+    "status": "parsed",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10BFP3",
+    "issuer": "МВ ФИНАНС-001Р-06",
+    "hex_code": "03CBE",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A105054",
+    "issuer": "ММЦБ-БО-П01-02",
+    "hex_code": "032D2",
+    "program_url": "https://st.finam.ru/ipo/decision/13010_0_Программа.pdf",
+    "program_pdf": "13010_0_Программа.pdf",
+    "status": "parsed",
+    "new_covenants": [
+      {
+        "event_number": "1",
+        "title": "Досрочное погашение в случае делистинга",
+        "full_text": "9.5.1 Досрочное погашение Биржевых облигаций по требованию их владельцев: Владельцы Биржевых облигаций вправе предъявить их к досрочному погашению в случае делистинга Биржевых облигаций на всех биржах, осуществивших их допуск к организованным торгам. Стоимость (порядок определения стоимости) досрочного погашения: Досрочное погашение Биржевых облигаций по требованию их владельцев производится по 100% от непогашенной части номинальной стоимости Биржевых облигаций",
+        "section": "9.5.1"
+      }
+    ],
+    "total_new": 1
+  },
+  {
+    "isin": "RU000A10FTM2",
+    "issuer": "ПКО ФИЛБЕРТ-БО-01",
+    "hex_code": "04892",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A103WB0",
+    "issuer": "СЛАВЯНСК ЭКО-001Р-01",
+    "hex_code": "02FEE",
+    "program_url": "https://st.finam.ru/ipo/decision/12270_0_Программа.pdf",
+    "program_pdf": "12270_0_Программа.pdf",
+    "status": "parsed",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10CCJ1",
+    "issuer": "СЛАВЯНСК ЭКО-001Р-04",
+    "hex_code": "0424B",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10C5J1",
+    "issuer": "ТАЛАН-ФИНАНС-001P-04",
+    "hex_code": "041CF",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A107SX3",
+    "issuer": "ЭКОНОМЛИЗИНГ-001Р-07",
+    "hex_code": "03A8D",
+    "program_url": "https://st.finam.ru/ipo/decision/14989_0_Программа.pdf",
+    "program_pdf": "14989_0_Программа.pdf",
+    "status": "parsed",
+    "new_covenants": [
+      {
+        "event_number": "1",
+        "title": "Досрочное погашение в случае делистинга",
+        "full_text": "азанным в настоящем пункте Программы, случаи досрочного погашения Биржевых облигаций по требованию их владельцев. В этом случае Условия выпуска должны содержать порядок и условия такого досрочного погашения Биржевых облигаций. Владельцы Биржевых облигаций вправе предъявить их к досрочному погашению в случае делистинга Биржевых облигаций на всех биржах, осуществивших их допуск к организованным торгам. Стоимость (порядок определения стоимости) досрочного погашения: Досрочное погашение Биржевых облигаций по требованию их владельцев производится по 100% от непогашенной части номинальной стоимости Биржевых облигаций",
+        "section": "9.5.1"
+      }
+    ],
+    "total_new": 1
+  },
+  {
+    "isin": "RU000A10B081",
+    "issuer": "ЭКОНОМЛИЗИНГ-001Р-08",
+    "hex_code": "03F7C",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10CDX0",
+    "issuer": "ЭКОНОМЛИЗИНГ-002Р-01",
+    "hex_code": "04295",
+    "program_url": "https://st.finam.ru/ipo/decision/17045_0_Программа_002P.pdf",
+    "program_pdf": "17045_0_Программа_002P.pdf",
+    "status": "parsed",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10ERA4",
+    "issuer": "ЭКОНОМЛИЗИНГ-002Р-02",
+    "hex_code": "04684",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10FSV5",
+    "issuer": "ЭКОНОМЛИЗИНГ-002Р-03",
+    "hex_code": "04862",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A105M59",
+    "issuer": "РОДЕЛЕН-001Р-03",
+    "hex_code": "0312A",
+    "program_url": "https://st.finam.ru/ipo/decision/12586_0_Программа_001Р.pdf",
+    "program_pdf": "12586_0_Программа_001Р.pdf",
+    "status": "parsed",
+    "new_covenants": [
+      {
+        "event_number": "1",
+        "title": "Досрочное погашение в случае делистинга",
+        "full_text": "лигаций по требованию их владельцев: В Условиях выпуска также могут быть установлены дополнительные к случаям, указанным в настоящем пункте Программы, случаи досрочного погашения Биржевых облигаций по требованию их владельцев. Владельцы Биржевых облигаций вправе предъявить их к досрочному погашению в случае делистинга Биржевых облигаций на всех биржах, осуществивших их допуск к организованным торгам. Стоимость (порядок определения стоимости) досрочного погашения: Досрочное погашение Биржевых облигаций по требованию их владельцев производится по 100% от непогашенной части номинальной стоимости Биржевых облигаций",
+        "section": "9.5.1"
+      }
+    ],
+    "total_new": 1
+  },
+  {
+    "isin": "RU000A105SK4",
+    "issuer": "РОДЕЛЕН-001Р-04",
+    "hex_code": "0355A",
+    "program_url": "https://st.finam.ru/ipo/decision/13658_0_Программа_001Р.pdf",
+    "program_pdf": "13658_0_Программа_001Р.pdf",
+    "status": "parsed",
+    "new_covenants": [
+      {
+        "event_number": "1",
+        "title": "Досрочное погашение в случае делистинга",
+        "full_text": "лигаций по требованию их владельцев: В Условиях выпуска также могут быть установлены дополнительные к случаям, указанным в настоящем пункте Программы, случаи досрочного погашения Биржевых облигаций по требованию их владельцев. Владельцы Биржевых облигаций вправе предъявить их к досрочному погашению в случае делистинга Биржевых облигаций на всех биржах, осуществивших их допуск к организованным торгам. Стоимость (порядок определения стоимости) досрочного погашения: Досрочное погашение Биржевых облигаций по требованию их владельцев производится по 100% от непогашенной части номинальной стоимости Биржевых облигаций",
+        "section": "9.5.1"
+      }
+    ],
+    "total_new": 1
+  },
+  {
+    "isin": "RU000A107076",
+    "issuer": "РОДЕЛЕН-002P-01",
+    "status": "not_found_on_finam",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A107SA1",
+    "issuer": "РОДЕЛЕН-002P-02",
+    "status": "not_found_on_finam",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10B2F7",
+    "issuer": "РОДЕЛЕН-002P-03",
+    "hex_code": "03FB3",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10C626",
+    "issuer": "РОДЕЛЕН-002P-04",
+    "hex_code": "041E3",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10EQD0",
+    "issuer": "РОДЕЛЕН-002P-05",
+    "hex_code": "045F5",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10FJ65",
+    "issuer": "РОДЕЛЕН-002P-06",
+    "hex_code": "047BE",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A109LC8",
+    "issuer": "РОЛЬФ-001Р-03",
+    "hex_code": "03D35",
+    "program_url": "https://st.finam.ru/ipo/decision/15669_0_Программа.pdf",
+    "program_pdf": "15669_0_Программа.pdf",
+    "status": "parsed",
+    "new_covenants": [
+      {
+        "event_number": "1",
+        "title": "Досрочное погашение в случае ликвидации",
+        "full_text": "9.5.1. Программы, а также предусмотренных законодательством Российской Федерации. В случае ликвидации Эмитента владелец Биржевой облигации вправе получить причитающиеся денежные средства в порядке очередности, установленной в соответствии со статьей 64 Гражданского кодекса Российской Федерации. Все задолженности Эмитента по Биржевым облигациям будут юридически равны и в равной степени обязательны к",
+        "section": "9.5.1"
+      }
+    ],
+    "total_new": 1
+  },
+  {
+    "isin": "RU000A10ASD4",
+    "issuer": "РОЛЬФ-001Р-06",
+    "hex_code": "03F21",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10ASE2",
+    "issuer": "РОЛЬФ-001Р-07",
+    "hex_code": "03F20",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10BQ60",
+    "issuer": "РОЛЬФ-001Р-08",
+    "hex_code": "0410C",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A10F850",
+    "issuer": "РОЛЬФ-001Р-09",
+    "hex_code": "0474E",
+    "status": "no_program_url",
+    "new_covenants": [],
+    "total_new": 0
+  },
+  {
+    "isin": "RU000A1040E8",
+    "issuer": "ЦИФРА БРОКЕР-П01-02",
+    "hex_code": "03093",
+    "program_url": "https://st.finam.ru/ipo/decision/12435_0_Программа_П01.pdf",
+    "program_pdf": "12435_0_Программа_П01.pdf",
+    "status": "parsed",
+    "new_covenants": [
+      {
+        "event_number": "1",
+        "title": "Досрочное погашение в случае делистинга",
+        "full_text": "азанным в настоящем пункте Программы, случаи досрочного погашения Биржевых облигаций по требованию их владельцев. В этом случае Условия выпуска должны содержать порядок и условия такого досрочного погашения Биржевых облигаций. Владельцы Биржевых облигаций вправе предъявить их к досрочному погашению в случае делистинга Биржевых облигаций на всех биржах, осуществивших их допуск к организованным торгам. 13 Стоимость (порядок определения стоимости) досрочного погашения: Досрочное погашение Биржевых облигаций по требованию их владельцев производится по 100% от непогашенной части номинальной стоимости",
+        "section": "9.5.1"
+      }
+    ],
+    "total_new": 1
+  }
+]
