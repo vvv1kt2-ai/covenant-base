@@ -233,4 +233,6 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
 
 
 if __name__ == "__main__":
-    export_to_excel()
+    import sys as _sys
+    out = _sys.argv[1] if len(_sys.argv) > 1 else "covarianants.xlsx"
+    export_to_excel(output_path=out)

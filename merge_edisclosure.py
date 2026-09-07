@@ -21,6 +21,85 @@ logger = logging.getLogger(__name__)
 EDISCLOSURE_SOURCE = "Программа облигаций (e-disclosure)"
 
 
+def extract_essence(full_text, section):
+    """Extract meaningful essence from program covenant full_text.
+
+    Prioritizes early redemption conditions over general rights.
+    """
+    if not full_text:
+        return f"Положение п. {section} Программы (из Программы)"
+
+    text = full_text.replace("\n", " ").strip()
+    import re
+
+    def _find_sentence(text, start_pattern):
+        """Find a sentence starting with pattern, skipping abbreviations (п. ст. с.).
+        Matches until a period followed by space+capital letter or end of text."""
+        m = re.search(start_pattern, text, re.IGNORECASE)
+        if not m:
+            return None
+        start = m.start()
+        # Now find the end of this sentence: period NOT followed by lowercase letter
+        pos = m.end()
+        while pos < len(text):
+            if text[pos] == '.':
+                # Check if next char is space+capital or end → sentence end
+                rest = text[pos+1:pos+4].lstrip()
+                if not rest or rest[0].isupper() or rest[0] in '«"':
+                    # Sentence end
+                    return text[start:pos+1].strip()
+            pos += 1
+        # No proper sentence end found, return everything from start
+        return text[start:].strip()[:400]
+
+    # PRIORITY 1: "право требовать досрочного погашения"
+    dosr_sentence = _find_sentence(text, r'(?:имеет право|вправе|предоставляется право)\s+требовать[^.]*досрочн')
+    if dosr_sentence:
+        # Prepend the condition: "в случае..."
+        case_sentence = _find_sentence(text, r'в случае[а-яё]*\s+(?:принятия|нарушения|ликвидации|делистинга|ненаступления)')
+        if not case_sentence:
+            case_sentence = _find_sentence(text, r'в случае[а-яё]*\s+')
+        essence = ""
+        if case_sentence:
+            essence = case_sentence + " "
+        essence += dosr_sentence
+        if len(essence) > 400:
+            essence = essence[:400] + "…"
+        return essence + " (из Программы)"
+
+    # PRIORITY 2: "в случае делистинга/ликвидации"
+    case_sentence = _find_sentence(text, r'в случае[а-яё]*\s+(?:делистинг|ликвидаци)')
+    if case_sentence:
+        if len(case_sentence) > 400:
+            case_sentence = case_sentence[:400] + "…"
+        return case_sentence + " (из Программы)"
+
+    # PRIORITY 3: "по 100% от непогашенной части"
+    price_match = re.search(r'((?:по|в размере)\s+\d+%[^.]+?\.)', text, re.IGNORECASE)
+    if price_match:
+        essence = price_match.group(1).strip()
+        if len(essence) > 400:
+            essence = essence[:400] + "…"
+        return essence + " (из Программы)"
+
+    # PRIORITY 4: Any "в случае..."
+    case_sentence = _find_sentence(text, r'в случае[а-яё]*\s+')
+    if case_sentence:
+        if len(case_sentence) > 400:
+            case_sentence = case_sentence[:400] + "…"
+        return case_sentence + " (из Программы)"
+
+    # Fallback: first meaningful sentence
+    sentences = [s.strip() for s in text.split(".") if len(s.strip()) > 30]
+    if sentences:
+        essence = sentences[0] + "."
+        if len(essence) > 400:
+            essence = essence[:400] + "…"
+        return essence + " (из Программы)"
+
+    return f"Положение п. {section} Программы (из Программы)"
+
+
 def main():
     base = Path(__file__).parent
 
@@ -88,15 +167,8 @@ def main():
                 section = ev.get("section", "?")
                 full_text = ev.get("full_text", "")
 
-                # Determine essence from title
-                if "делистинг" in title.lower():
-                    essence = "Досрочное погашение в случае делистинга (из Программы)"
-                elif "ликвидаци" in title.lower():
-                    essence = "Досрочное погашение в случае ликвидации (из Программы)"
-                elif "нарушен" in title.lower() or "отчетност" in title.lower():
-                    essence = f"{title} (из Программы)"
-                else:
-                    essence = f"{title} (из Программы)" if title else "Досрочное погашение (из Программы)"
+                # Generate meaningful essence from full_text
+                essence = extract_essence(full_text, section)
 
                 new_covenant = {
                     "number": existing_count + 1,
