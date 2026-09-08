@@ -144,6 +144,17 @@ def test_categorize_covenant_seven_categories(text, expected):
     assert categorize_covenant(text) == expected
 
 
+def test_cross_default_beats_debt_keyword_order():
+    """Cross-default formula mentions 'долговым обязательствам' — the specific
+    category must win over the generic debt keyword regardless of order."""
+    formula = ("Нарушение Эмитентом своих обязательств перед иными третьими лицам "
+               "(кросс-дефолт): просрочка платежа по иным долговым обязательствам "
+               "Эмитента более чем на 10 дней")
+    assert categorize_covenant(formula) == "Кросс-дефолт"
+    # Pure debt covenant (no cross words) still classifies as debt
+    assert categorize_covenant("Соотношение долга и левериджа превысит порог") == "Долговая нагрузка"
+
+
 def test_classify_two_stage_falls_back_to_conditions():
     """Generic essence gets classified via conditions text."""
     assert classify_covenant_text("Событие досрочного погашения") == "Иное"
