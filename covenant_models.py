@@ -1,70 +1,166 @@
-"""Shared covenant building and classification functions.
+"""Single source of truth for the covenant data model.
 
-Eliminates duplication between parser.py, merge_programs.py, merge_edisclosure.py.
-Single source of truth for covenant dict schema and category logic.
+Owns:
+- Covenant / ResultEntry dataclasses — the schema of results.json,
+- tolerant JSON (de)serialisation (from_dict / to_dict),
+- results.json I/O (load_results / save_results),
+- covenant construction from decision and program documents,
+- category classification (unified 7-category taxonomy).
+
+Consumers: parser.py, merge_programs.py, merge_edisclosure.py,
+reparse_missing.py, export_excel.py, reclassify_categories.py.
 """
+import json
 import re
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 MAX_QUOTE_LEN = 500
 MAX_COND_LEN = 1000
 MAX_ESSENCE_LEN = 400
 
 
-def build_covenant(existing_count, clause=None, event=None, section_title="", is_provided=True):
-    """Build a covenant dict from decision PDF clause/event data.
+# ---------------------------------------------------------------------------
+# Schema: results.json
+# ---------------------------------------------------------------------------
 
-    Used by: parser.py (main parse pipeline)
-    """
-    if event:
-        section = f"п. {clause.section}, {event.event_number}" if clause and clause.section else event.event_number
+@dataclass
+class Covenant:
+    """One covenant extracted from a decision or program document."""
+
+    number: int = 0  # assigned by ResultEntry.add_covenant
+    category: str = ""
+    essence: str = ""
+    document: str = ""
+    section: str = ""
+    page: int = 0
+    quote: str = ""
+    is_provided: bool = True
+    conditions: str = ""
+
+    @classmethod
+    def from_dict(cls, data):
+        """Build from JSON dict. Missing fields -> defaults, unknown keys ignored
+        (old records carry a dead per-covenant 'total_covenants' key)."""
+        return cls(
+            number=data.get("number", 0),
+            category=data.get("category", ""),
+            essence=data.get("essence", ""),
+            document=data.get("document", ""),
+            section=data.get("section", ""),
+            page=data.get("page", 0),
+            quote=data.get("quote", ""),
+            is_provided=data.get("is_provided", True),
+            conditions=data.get("conditions", ""),
+        )
+
+    def to_dict(self):
         return {
-            "number": existing_count + 1,
-            "category": "Досрочное погашение по требованию владельцев",
-            "essence": event.title,
-            "document": "Решение о выпуске",
-            "section": section,
-            "page": event.page or (clause.page if clause else 0),
-            "quote": event.full_text[:MAX_QUOTE_LEN],
-            "is_provided": True,
-            "conditions": event.full_text[:MAX_COND_LEN],
-            "total_covenants": 0,  # caller sets after collecting all
+            "number": self.number,
+            "category": self.category,
+            "essence": self.essence,
+            "document": self.document,
+            "section": self.section,
+            "page": self.page,
+            "quote": self.quote,
+            "is_provided": self.is_provided,
+            "conditions": self.conditions,
         }
-    else:
+
+
+@dataclass
+class ResultEntry:
+    """One ISIN record in results.json."""
+
+    isin: str
+    issuer: str = ""
+    issue_name: str = ""
+    rating: str = ""
+    decision_url: str = ""
+    decision_pdf: str = ""
+    covenants: list = field(default_factory=list)  # list[Covenant]
+    parse_errors: list = field(default_factory=list)  # list[str]
+    processed_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    # Program-pipeline fields (set by parser.py / merge_* scripts)
+    needs_program_check: bool = False
+    program_checked: bool = False
+    program_url: str = ""
+    program_status: str = ""
+    requires_manual_check: bool = False
+    manual_check_reason: str = ""
+
+    @property
+    def total_covenants(self) -> int:
+        """Always len(covenants); never stored separately."""
+        return len(self.covenants)
+
+    def add_covenant(self, cov: Covenant) -> Covenant:
+        """Append a covenant and assign its sequential number."""
+        cov.number = len(self.covenants) + 1
+        self.covenants.append(cov)
+        return cov
+
+    @classmethod
+    def from_dict(cls, data):
+        """Build from JSON dict. Missing fields -> defaults, unknown keys ignored."""
+        covenants = [Covenant.from_dict(c) for c in data.get("covenants", [])]
+        return cls(
+            isin=data.get("isin", ""),
+            issuer=data.get("issuer", ""),
+            issue_name=data.get("issue_name", ""),
+            rating=data.get("rating", ""),
+            decision_url=data.get("decision_url", ""),
+            decision_pdf=data.get("decision_pdf", ""),
+            covenants=covenants,
+            parse_errors=data.get("parse_errors", []),
+            processed_at=data.get("processed_at", ""),
+            needs_program_check=data.get("needs_program_check", False),
+            program_checked=data.get("program_checked", False),
+            program_url=data.get("program_url", ""),
+            program_status=data.get("program_status", ""),
+            requires_manual_check=data.get("requires_manual_check", False),
+            manual_check_reason=data.get("manual_check_reason", ""),
+        )
+
+    def to_dict(self):
         return {
-            "number": existing_count + 1,
-            "category": "Досрочное погашение по требованию владельцев",
-            "essence": section_title or (clause.section_title if clause else ""),
-            "document": "Решение о выпуске",
-            "section": f"п. {clause.section}" if clause and clause.section else "",
-            "page": clause.page if clause else 0,
-            "quote": (clause.full_text[:MAX_QUOTE_LEN] if clause else ""),
-            "is_provided": is_provided,
-            "conditions": (clause.conditions[:MAX_COND_LEN] if clause and clause.conditions else ""),
-            "total_covenants": 0,
+            "isin": self.isin,
+            "issuer": self.issuer,
+            "issue_name": self.issue_name,
+            "rating": self.rating,
+            "decision_url": self.decision_url,
+            "decision_pdf": self.decision_pdf,
+            "covenants": [c.to_dict() for c in self.covenants],
+            "total_covenants": self.total_covenants,
+            "parse_errors": self.parse_errors,
+            "processed_at": self.processed_at,
+            "needs_program_check": self.needs_program_check,
+            "program_checked": self.program_checked,
+            "program_url": self.program_url,
+            "program_status": self.program_status,
+            "requires_manual_check": self.requires_manual_check,
+            "manual_check_reason": self.manual_check_reason,
         }
 
 
-def build_program_covenant(existing_count, title, section, full_text, document_source):
-    """Build a covenant dict from program PDF data.
+def load_results(path) -> list:
+    """Load results.json into ResultEntry models (tolerant of old shapes)."""
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return [ResultEntry.from_dict(d) for d in data]
 
-    Used by: merge_programs.py, merge_edisclosure.py
-    document_source: 'Программа облигаций' or 'Программа облигаций (e-disclosure)'
-    """
-    essence = _extract_essence(full_text, section) if full_text else title
-    category = categorize_covenant(full_text or title)
 
-    return {
-        "number": existing_count + 1,
-        "category": category,
-        "essence": essence,
-        "document": document_source,
-        "section": f"п. {section}" if section else "",
-        "page": 0,
-        "quote": full_text[:MAX_QUOTE_LEN] if full_text else "",
-        "is_provided": True,
-        "conditions": full_text[:MAX_COND_LEN] if full_text else "",
-    }
+def save_results(path, entries: list) -> None:
+    """Save ResultEntry models to results.json in canonical form."""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump([e.to_dict() for e in entries], f, ensure_ascii=False, indent=2)
 
+
+# ---------------------------------------------------------------------------
+# Classification (unified 7-category taxonomy)
+# ---------------------------------------------------------------------------
 
 def categorize_covenant(text):
     """Classify a covenant into one of the defined categories.
@@ -123,6 +219,18 @@ def categorize_covenant(text):
     return "Иное"
 
 
+def classify_covenant_text(essence, conditions=""):
+    """Two-stage classification rule used by builders and reclassification alike.
+
+    Stage 1: classify on essence alone (the event/trigger title carries the type).
+    Stage 2: if that yields 'Иное', retry with conditions appended (full clause text).
+    """
+    category = categorize_covenant(essence)
+    if category != "Иное":
+        return category
+    return categorize_covenant(f"{essence} {conditions or ''}")
+
+
 def is_real_covenant(text):
     """Check if a program-sourced covenant is a real covenant (not just mechanism description).
 
@@ -131,6 +239,90 @@ def is_real_covenant(text):
     """
     lower = text.lower() if text else ""
     return "делистинг" in lower
+
+
+def reclassify_results(path) -> int:
+    """Reclassify stored covenants into the unified taxonomy. Returns count changed.
+
+    Explicit migration pass: from_dict/to_dict stay honest (round-trip never
+    mutates data silently). is_provided=False records are markers ("put не
+    предусмотрен"), not covenants — their category is left untouched.
+    Classification input matches build time: essence + conditions.
+    """
+    entries = load_results(path)
+    changed = 0
+    for entry in entries:
+        for cov in entry.covenants:
+            if not cov.is_provided:
+                continue
+            new_category = classify_covenant_text(cov.essence, cov.conditions)
+            if new_category != cov.category:
+                cov.category = new_category
+                changed += 1
+    save_results(path, entries)
+    return changed
+
+
+# ---------------------------------------------------------------------------
+# Builders (return Covenant without number; caller assigns via add_covenant)
+# ---------------------------------------------------------------------------
+
+def build_covenant(clause=None, event=None, section_title="", is_provided=True):
+    """Build a Covenant from decision PDF clause/event data.
+
+    Used by: parser.py, reparse_missing.py
+    """
+    if event:
+        section = f"п. {clause.section}, {event.event_number}" if clause and clause.section else event.event_number
+        conditions = event.full_text[:MAX_COND_LEN]
+        return Covenant(
+            category=classify_covenant_text(event.title, conditions),
+            essence=event.title,
+            document="Решение о выпуске",
+            section=section,
+            page=event.page or (clause.page if clause else 0),
+            quote=event.full_text[:MAX_QUOTE_LEN],
+            is_provided=True,
+            conditions=conditions,
+        )
+    else:
+        essence = section_title or (clause.section_title if clause else "")
+        conditions = clause.conditions[:MAX_COND_LEN] if clause and clause.conditions else ""
+        if is_provided:
+            category = classify_covenant_text(essence, conditions)
+        else:
+            # Marker record ("put не предусмотрен") — not a classified covenant.
+            category = "Досрочное погашение по требованию владельцев"
+        return Covenant(
+            category=category,
+            essence=essence,
+            document="Решение о выпуске",
+            section=f"п. {clause.section}" if clause and clause.section else "",
+            page=clause.page if clause else 0,
+            quote=(clause.full_text[:MAX_QUOTE_LEN] if clause else ""),
+            is_provided=is_provided,
+            conditions=conditions,
+        )
+
+
+def build_program_covenant(title, section, full_text, document_source):
+    """Build a Covenant from program PDF data.
+
+    Used by: merge_programs.py, merge_edisclosure.py
+    document_source: 'Программа облигаций' or 'Программа облигаций (e-disclosure)'
+    """
+    essence = _extract_essence(full_text, section) if full_text else title
+    conditions = full_text[:MAX_COND_LEN] if full_text else ""
+    return Covenant(
+        category=classify_covenant_text(essence, conditions),
+        essence=essence,
+        document=document_source,
+        section=f"п. {section}" if section else "",
+        page=0,
+        quote=full_text[:MAX_QUOTE_LEN] if full_text else "",
+        is_provided=True,
+        conditions=conditions,
+    )
 
 
 def _extract_essence(full_text, section):

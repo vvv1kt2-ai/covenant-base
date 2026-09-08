@@ -1,6 +1,6 @@
 """Merge program covenants from results_programs.json into results.json.
 
-Uses covenant_models.build_program_covenant for dict construction.
+Reads/writes results.json exclusively through covenant_models.
 """
 import json
 import logging
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from covenant_models import build_program_covenant, is_real_covenant
+from covenant_models import build_program_covenant, is_real_covenant, load_results, save_results
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,13 +21,12 @@ logger = logging.getLogger(__name__)
 def main():
     base = Path(__file__).parent
 
-    with open(base / "results.json", encoding="utf-8") as f:
-        results = json.load(f)
+    results = load_results(base / "results.json")
 
     with open(base / "results_programs.json", encoding="utf-8") as f:
         programs = json.load(f)
 
-    results_by_isin = {r["isin"]: r for r in results}
+    results_by_isin = {r.isin: r for r in results}
     merged_count = 0
     new_covenant_count = 0
 
@@ -40,9 +39,9 @@ def main():
             # Mark checked even with no covenants
             if isin in results_by_isin:
                 entry = results_by_isin[isin]
-                entry["program_checked"] = True
-                entry["program_url"] = prog.get("program_url", "")
-                entry["program_status"] = prog.get("status", "")
+                entry.program_checked = True
+                entry.program_url = prog.get("program_url", "")
+                entry.program_status = prog.get("status", "")
             continue
 
         if isin not in results_by_isin:
@@ -50,7 +49,6 @@ def main():
             continue
 
         entry = results_by_isin[isin]
-        existing_count = len(entry.get("covenants", []))
 
         for ev in new_covs:
             title = ev.get("title", "")
@@ -63,26 +61,21 @@ def main():
                 logger.info(f"  SKIP {isin}: not a real covenant: {title[:60]}")
                 continue
 
-            new_covenant = build_program_covenant(
-                existing_count=existing_count,
+            new_cov = entry.add_covenant(build_program_covenant(
                 title=title,
                 section=section,
                 full_text=full_text,
                 document_source="Программа облигаций",
-            )
-            entry["covenants"].append(new_covenant)
-            existing_count += 1
+            ))
             new_covenant_count += 1
-            logger.info(f"  +{isin}: {new_covenant['essence'][:70]}")
+            logger.info(f"  +{isin}: {new_cov.essence[:70]}")
 
-        entry["total_covenants"] = len(entry["covenants"])
-        entry["program_checked"] = True
-        entry["program_url"] = prog.get("program_url", "")
-        entry["program_status"] = prog.get("status", "")
+        entry.program_checked = True
+        entry.program_url = prog.get("program_url", "")
+        entry.program_status = prog.get("status", "")
         merged_count += 1
 
-    with open(base / "results.json", "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
+    save_results(base / "results.json", results)
 
     logger.info(f"\n{'='*60}")
     logger.info(f"MERGE COMPLETE")
@@ -90,8 +83,8 @@ def main():
     logger.info(f"ISINs with new covenants merged: {merged_count}")
     logger.info(f"Total new covenants added: {new_covenant_count}")
 
-    total_covenants = sum(len(r.get("covenants", [])) for r in results)
-    isins_with_covs = sum(1 for r in results if len(r.get("covenants", [])) > 0)
+    total_covenants = sum(r.total_covenants for r in results)
+    isins_with_covs = sum(1 for r in results if r.total_covenants > 0)
     logger.info(f"\nUpdated totals:")
     logger.info(f"  Total ISINs: {len(results)}")
     logger.info(f"  ISINs with covenants: {isins_with_covs}")

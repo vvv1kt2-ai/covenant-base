@@ -1,5 +1,4 @@
 """Export results.json to Excel following the template format."""
-import json
 from pathlib import Path
 
 try:
@@ -10,10 +9,11 @@ except ImportError:
     print("ERROR: pip install openpyxl")
     exit(1)
 
+from covenant_models import load_results
+
 
 def export_to_excel(results_path: str = "results.json", output_path: str = "covarianants.xlsx"):
-    with open(results_path, encoding="utf-8") as f:
-        data = json.load(f)
+    data = load_results(results_path)
 
     wb = Workbook()
     ws = wb.active
@@ -61,20 +61,20 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
     total_errors = 0
 
     for r in data:
-        issuer = r.get("issuer", "")
-        issue_name = r.get("issue_name", "")
-        isin = r.get("isin", "")
-        rating = r.get("rating", "")
-        covenants = r.get("covenants", [])
-        num_covenants = r.get("total_covenants", len(covenants))
-        decision_url = r.get("decision_url", "")
+        issuer = r.issuer
+        issue_name = r.issue_name
+        isin = r.isin
+        rating = r.rating
+        covenants = r.covenants
+        num_covenants = r.total_covenants
+        decision_url = r.decision_url
         filename = decision_url.split("/")[-1] if decision_url else ""
-        program_url = r.get("program_url", "")
-        parse_errors = r.get("parse_errors", [])
+        program_url = r.program_url
+        parse_errors = r.parse_errors
 
         # --- Error ISINs: mark for manual check ---
-        has_manual_check = r.get("requires_manual_check", False)
-        error_reason = r.get("manual_check_reason", "")
+        has_manual_check = r.requires_manual_check
+        error_reason = r.manual_check_reason
         if (parse_errors and num_covenants == 0) or has_manual_check:
             total_errors += 1
             if has_manual_check:
@@ -118,8 +118,8 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
             total_with_covenants += 1
 
             for i, cov in enumerate(covenants):
-                is_provided = cov.get("is_provided", False)
-                is_from_program = "Программа" in cov.get("document", "")
+                is_provided = cov.is_provided
+                is_from_program = "Программа" in cov.document
 
                 if is_provided:
                     category = "Информационный (отчётность эмитента) +\nРаскрытие отчётности эмитента"
@@ -127,10 +127,10 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
                     category = "Положения о досрочном погашении"
 
                 # Essence comes directly from parser (event title or section title)
-                essence = cov.get("essence", "")
-                section = cov.get("section", "")
-                page = cov.get("page", "")
-                quote = cov.get("quote", "").replace("\n", " ")
+                essence = cov.essence
+                section = cov.section
+                page = cov.page
+                quote = cov.quote.replace("\n", " ")
                 if len(quote) > 500:
                     quote = quote[:500] + "\u2026"
 
@@ -149,10 +149,10 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
                     isin if i == 0 else "",
                     rating if i == 0 else "",
                     num_covenants if i == 0 else "",
-                    cov.get("number", i + 1),
+                    cov.number,
                     category,
                     essence,
-                    cov.get("document", ""),
+                    cov.document,
                     section,
                     page,
                     file_name,

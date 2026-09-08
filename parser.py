@@ -1,15 +1,14 @@
 """Main parser pipeline for bond emission documents."""
 import argparse
-import json
 import logging
 import re
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from config import Config
+from covenant_models import ResultEntry, build_covenant, load_results, save_results
 from finam_client import FinamClient, BondCard
 from pdf_parser import PDFParser, DocumentParseResult
 
@@ -130,15 +129,6 @@ def unzip_if_needed(pdf_path):
 
 
 
-def build_covenant(existing_count, clause=None, event=None, section_title="", is_provided=True):
-    """Build a single covenant dict from clause/event data.
-
-    NOTE: Canonical implementation is in covenant_models.py.
-    This is kept for backward compatibility; callers should prefer covenant_models.
-    """
-    from covenant_models import build_covenant as _build
-    return _build(existing_count, clause, event, section_title, is_provided)
-
 def process_isin(isin, client, pdf_parser, config):
     """Process a single ISIN: search, download, parse."""
     logger = logging.getLogger(__name__)
@@ -146,47 +136,36 @@ def process_isin(isin, client, pdf_parser, config):
     logger.info(f"Processing ISIN: {isin}")
     logger.info(f"{'='*60}")
 
-    result = {
-        "isin": isin,
-        "issuer": "",
-        "issue_name": "",
-        "rating": "",
-        "decision_url": "",
-        "decision_pdf": "",
-        "covenants": [],
-        "total_covenants": 0,
-        "parse_errors": [],
-        "processed_at": datetime.now().isoformat(),
-    }
+    result = ResultEntry(isin=isin)
 
     try:
         # Step 1: Search for ISIN
         hex_code = client.search_by_isin(isin)
         if not hex_code:
-            result["parse_errors"].append(f"ISIN {isin} not found on Finam")
+            result.parse_errors.append(f"ISIN {isin} not found on Finam")
             logger.warning(f"ISIN {isin} not found")
             return result
 
         # Step 2: Get bond card
         card = client.get_bond_card(isin, hex_code)
         if not card:
-            result["parse_errors"].append(f"Failed to load bond card for {isin}")
+            result.parse_errors.append(f"Failed to load bond card for {isin}")
             return result
 
-        result["issuer"] = card.issuer
-        result["issue_name"] = card.issue_name
-        result["rating"] = card.rating
-        result["decision_url"] = card.decision_url or ""
+        result.issuer = card.issuer
+        result.issue_name = card.issue_name
+        result.rating = card.rating
+        result.decision_url = card.decision_url or ""
 
         # Step 3: Download decision PDF
         isin_dir = config.isin_download_dir(isin)
         decision_path = download_pdf(client, card.decision_url, isin_dir, "decision.pdf")
         if decision_path:
             decision_path = unzip_if_needed(decision_path)
-            result["decision_pdf"] = decision_path.name if decision_path else ""
+            result.decision_pdf = decision_path.name if decision_path else ""
 
         if not decision_path:
-            result["parse_errors"].append(f"Failed to download decision PDF for {isin}")
+            result.parse_errors.append(f"Failed to download decision PDF for {isin}")
             return result
 
         # Step 4: Parse decision PDF
@@ -194,11 +173,11 @@ def process_isin(isin, client, pdf_parser, config):
         doc_result = pdf_parser.parse_decision(decision_path)
 
         if not doc_result.has_text_layer:
-            result["parse_errors"].append(f"No text layer in decision PDF for {isin}")
+            result.parse_errors.append(f"No text layer in decision PDF for {isin}")
             return result
 
         if doc_result.error:
-            result["parse_errors"].append(doc_result.error)
+            result.parse_errors.append(doc_result.error)
 
         # Process redemption clauses
         for clause in doc_result.redemption_clauses:
@@ -207,40 +186,27 @@ def process_isin(isin, client, pdf_parser, config):
                 note = ""
                 if clause.needs_program_check:
                     note = " (ссылка на Программу — проверить вручную)"
-                    result["needs_program_check"] = True
+                    result.needs_program_check = True
                 logger.info(f"  {isin}: 0 covenants{note}")
                 continue
 
             if clause.events:
                 for event in clause.events:
-                    result["covenants"].append(
-                        build_covenant(len(result["covenants"]), clause=clause, event=event)
-                    )
+                    result.add_covenant(build_covenant(clause=clause, event=event))
             else:
-                result["covenants"].append(
-                    build_covenant(len(result["covenants"]), clause=clause)
-                )
-
-        result["total_covenants"] = len(result["covenants"])
+                result.add_covenant(build_covenant(clause=clause))
 
         logger.info(
-            f"Completed {isin}: {result['total_covenants']} covenants found, "
-            f"{len(result['parse_errors'])} errors"
+            f"Completed {isin}: {result.total_covenants} covenants found, "
+            f"{len(result.parse_errors)} errors"
         )
 
     except Exception as e:
         error_msg = f"Unexpected error processing {isin}: {e}"
         logger.error(error_msg)
-        result["parse_errors"].append(error_msg)
+        result.parse_errors.append(error_msg)
 
     return result
-
-
-def save_results(results, output_path):
-    """Save results to JSON file."""
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
-    logging.info(f"Results saved to {output_path} ({len(results)} ISINs)")
 
 
 def main():
@@ -277,9 +243,8 @@ def main():
         # --retry-errors without --input: load error ISINs from results.json
         output_path = Path(args.output)
         if output_path.exists():
-            with open(output_path, "r", encoding="utf-8") as f:
-                existing = json.load(f)
-            isins = [r["isin"] for r in existing if r.get("parse_errors")]
+            existing = load_results(output_path)
+            isins = [r.isin for r in existing if r.parse_errors]
             logger.info(f"Retry mode: loaded {len(isins)} error ISINs from {args.output}")
         else:
             logger.error("--retry-errors without --input requires existing results.json")
@@ -302,12 +267,10 @@ def main():
     # Resume mode: load existing results, skip already-processed ISINs
     if args.resume and output_path.exists():
         try:
-            with open(output_path, "r", encoding="utf-8") as f:
-                existing_data = json.load(f)
-            for r in existing_data:
+            for r in load_results(output_path):
                 # Skip ISINs that were processed without fatal errors
-                if not r.get("parse_errors") or r.get("total_covenants", 0) > 0:
-                    processed_isins.add(r["isin"])
+                if not r.parse_errors or r.total_covenants > 0:
+                    processed_isins.add(r.isin)
                     existing_results.append(r)
             logger.info(f"Resume mode: {len(processed_isins)} ISINs already processed, will skip them")
         except Exception as e:
@@ -315,9 +278,7 @@ def main():
 
     if args.retry_errors and output_path.exists():
         try:
-            with open(output_path, "r", encoding="utf-8") as f:
-                existing_data = json.load(f)
-            error_isins = {r["isin"] for r in existing_data if r.get("parse_errors")}
+            error_isins = {r.isin for r in load_results(output_path) if r.parse_errors}
             isins = [i for i in isins if i in error_isins]
             logger.info(f"Retry mode: {len(isins)} ISINs with errors to retry")
         except Exception as e:
@@ -344,7 +305,7 @@ def main():
             results.append(result)
 
             if idx % 10 == 0:
-                save_results(results, output_path)
+                save_results(output_path, results)
                 logger.info(f"Progress: {idx}/{len(isins)} ISINs processed")
 
     except KeyboardInterrupt:
@@ -354,12 +315,12 @@ def main():
     finally:
         client.stop()
 
-    save_results(results, output_path)
+    save_results(output_path, results)
 
     elapsed = time.time() - start_time
     total = len(results)
-    errors = sum(1 for r in results if r["parse_errors"])
-    found = sum(1 for r in results if r["total_covenants"] > 0)
+    errors = sum(1 for r in results if r.parse_errors)
+    found = sum(1 for r in results if r.total_covenants > 0)
 
     logger.info(f"\n{'='*60}")
     logger.info(f"SUMMARY")

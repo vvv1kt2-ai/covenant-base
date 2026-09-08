@@ -10,6 +10,7 @@ template_dump.txt
 *.docx
 fix_*.py
 test_*.py
+!test_covenant_models.py
 show_*.py
 patch_*.py
 check_*.py
@@ -20,6 +21,13 @@ debug_*.py
 
 # Large generated files
 *.zip
+
+# Sandbox/test leftovers (locked by DSH sandbox, removable manually)
+.pytest_tmp/
+tmp_test/
+covtest-*/
+probe-mkdtemp-*/
+pytest-cache-files-*/
 
 # Data files - track these explicitly with git add -f if needed
 results.json

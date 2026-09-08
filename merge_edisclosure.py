@@ -1,6 +1,6 @@
 """Merge e-disclosure program covenants into results.json.
 
-Uses covenant_models for dict construction and classification.
+Reads/writes results.json exclusively through covenant_models.
 """
 import json
 import logging
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from covenant_models import build_program_covenant, is_real_covenant
+from covenant_models import build_program_covenant, is_real_covenant, load_results, save_results
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,34 +23,33 @@ EDISCLOSURE_SOURCE = "Программа облигаций (e-disclosure)"
 def main():
     base = Path(__file__).parent
 
-    with open(base / "results.json", encoding="utf-8") as f:
-        results = json.load(f)
+    results = load_results(base / "results.json")
 
     with open(base / "edisclosure_pilot.json", encoding="utf-8") as f:
         edisclosure = json.load(f)
 
-    results_by_isin = {r["isin"]: r for r in results}
+    results_by_isin = {r.isin: r for r in results}
     merged_count = 0
     new_covenant_count = 0
     no_text_layer_isins = []
 
-    for entry in edisclosure:
-        emitter = entry.get("emitter", "?")
-        company_id = entry.get("company_id", "?")
-        isins = entry.get("isins", [])
-        status = entry.get("status", "")
-        program_covenants = entry.get("program_covenants", {})
+    for entry_data in edisclosure:
+        emitter = entry_data.get("emitter", "?")
+        company_id = entry_data.get("company_id", "?")
+        isins = entry_data.get("isins", [])
+        status = entry_data.get("status", "")
+        program_covenants = entry_data.get("program_covenants", {})
 
         # Mark ISINs with no covenants found as requiring manual check
         if status == "downloaded" and not program_covenants:
             for isin in isins:
                 if isin in results_by_isin:
                     r = results_by_isin[isin]
-                    r["program_checked"] = True
-                    r["program_url"] = f"https://e-disclosure.ru/portal/files.aspx?id={company_id}&type=7"
-                    r["program_status"] = "no_covenants_found"
-                    r["requires_manual_check"] = True
-                    r["manual_check_reason"] = (
+                    r.program_checked = True
+                    r.program_url = f"https://e-disclosure.ru/portal/files.aspx?id={company_id}&type=7"
+                    r.program_status = "no_covenants_found"
+                    r.requires_manual_check = True
+                    r.manual_check_reason = (
                         "Программа облигаций скачана с e-disclosure, "
                         "но ковенанты не найдены (возможно, нет текстового слоя)"
                     )
@@ -64,7 +63,6 @@ def main():
                 continue
 
             r = results_by_isin[isin]
-            existing_count = len(r.get("covenants", []))
 
             all_events = []
             for events in program_covenants.values():
@@ -84,26 +82,21 @@ def main():
                     logger.info(f"  SKIP {isin}: not a real covenant: {title[:60]}")
                     continue
 
-                new_covenant = build_program_covenant(
-                    existing_count=existing_count,
+                new_cov = r.add_covenant(build_program_covenant(
                     title=title,
                     section=section,
                     full_text=full_text,
                     document_source=EDISCLOSURE_SOURCE,
-                )
-                r["covenants"].append(new_covenant)
-                existing_count += 1
+                ))
                 new_covenant_count += 1
-                logger.info(f"  +{isin} ({emitter}): {new_covenant['essence'][:70]}")
+                logger.info(f"  +{isin} ({emitter}): {new_cov.essence[:70]}")
 
-            r["total_covenants"] = len(r["covenants"])
-            r["program_checked"] = True
-            r["program_url"] = f"https://e-disclosure.ru/portal/files.aspx?id={company_id}&type=7"
-            r["program_status"] = status
+            r.program_checked = True
+            r.program_url = f"https://e-disclosure.ru/portal/files.aspx?id={company_id}&type=7"
+            r.program_status = status
             merged_count += 1
 
-    with open(base / "results.json", "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
+    save_results(base / "results.json", results)
 
     logger.info(f"\n{'='*60}")
     logger.info(f"MERGE COMPLETE")
@@ -113,9 +106,9 @@ def main():
     if no_text_layer_isins:
         logger.info(f"Manual check needed: {len(no_text_layer_isins)} ISINs")
 
-    total_covenants = sum(len(r.get("covenants", [])) for r in results)
-    isins_with_covs = sum(1 for r in results if len(r.get("covenants", [])) > 0)
-    manual = sum(1 for r in results if r.get("requires_manual_check"))
+    total_covenants = sum(r.total_covenants for r in results)
+    isins_with_covs = sum(1 for r in results if r.total_covenants > 0)
+    manual = sum(1 for r in results if r.requires_manual_check)
     logger.info(f"\nTotals: {len(results)} ISINs, {isins_with_covs} with covenants, "
                 f"{total_covenants} covenants, {manual} manual check")
 
