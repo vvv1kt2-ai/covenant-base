@@ -111,7 +111,7 @@ class PDFParser:
                     logger.warning(f"No text layer in {pdf_path.name}")
                     return result
 
-                clause = self._find_redemption_clause(full_text, "5.6.1")
+                clause = self.find_redemption_clause(full_text, "5.6.1")
                 if clause:
                     result.redemption_clauses.append(clause)
                 else:
@@ -206,7 +206,7 @@ class PDFParser:
 
         return events
 
-    def _find_redemption_clause(self, text: str, section_number: str) -> Optional[RedemptionClause]:
+    def find_redemption_clause(self, text: str, section_number: str) -> Optional[RedemptionClause]:
         """Find section 5.6.1 and parse its contents."""
         section_pattern = re.compile(
             rf"{re.escape(section_number)}[\.\s]"
@@ -535,3 +535,76 @@ class PDFParser:
             full_text=context, page=page, is_provided=False,
             conditions="", events=[], has_federal_law_only=True,
         )
+
+    # ------------------------------------------------------------------
+    # Program-document parsing (bond program, focused on specific sections)
+    # ------------------------------------------------------------------
+
+    def parse_program_with_sections(self, pdf_path: Path, target_sections):
+        """Parse a program PDF focusing on specific sections from the decision.
+
+        Three-stage matching:
+        1. auto-parsed clauses whose section matches a target
+        2. explicit search for each target section
+        3. all auto-parsed sections (targets may be wrong)
+
+        Returns a list of plain event dicts (event_number, title, full_text,
+        section).
+        """
+        result = self.parse_decision(pdf_path)
+
+        if result.error:
+            logger.warning(f"Parse error: {result.error}")
+            return []
+        if not result.has_text_layer:
+            logger.warning("No text layer")
+            return []
+
+        all_events = []
+
+        # Step 1: Try auto-parsed sections that match our targets
+        for clause in result.redemption_clauses:
+            if clause.is_provided and clause.events:
+                for target in target_sections:
+                    if clause.section and (clause.section.startswith(target) or target.startswith(clause.section)):
+                        logger.info(f"  Matched section {clause.section} (target={target}): {len(clause.events)} events")
+                        for ev in clause.events:
+                            all_events.append({
+                                "event_number": ev.event_number,
+                                "title": ev.title,
+                                "full_text": ev.full_text,
+                                "section": clause.section,
+                            })
+                        break
+
+        # Step 2: If no match, try explicit section search
+        if not all_events:
+            logger.info("No auto-parsed match, trying explicit section searches...")
+            for target in target_sections:
+                clause = self.find_redemption_clause(result.raw_text, target)
+                if clause and clause.is_provided and clause.events:
+                    logger.info(f"  Found section {target}: {len(clause.events)} events")
+                    for ev in clause.events:
+                        all_events.append({
+                            "event_number": ev.event_number,
+                            "title": ev.title,
+                            "full_text": ev.full_text,
+                            "section": target,
+                        })
+                    break
+
+        # Step 3: Also try all auto-parsed sections (in case targets are wrong)
+        if not all_events:
+            logger.info("Explicit search failed, checking all auto-parsed sections...")
+            for clause in result.redemption_clauses:
+                if clause.is_provided and clause.events:
+                    logger.info(f"  Section {clause.section}: {len(clause.events)} events")
+                    for ev in clause.events:
+                        all_events.append({
+                            "event_number": ev.event_number,
+                            "title": ev.title,
+                            "full_text": ev.full_text,
+                            "section": clause.section,
+                        })
+
+        return all_events

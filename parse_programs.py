@@ -241,7 +241,7 @@ def main():
             if not program_events:
                 logger.info("Trying section 9.5.1 explicitly...")
                 for section_num in ["9.5.1", "9.5"]:
-                    clause = pdf_parser._find_redemption_clause(result.raw_text, section_num)
+                    clause = pdf_parser.find_redemption_clause(result.raw_text, section_num)
                     if clause and clause.is_provided:
                         for ev in clause.events:
                             program_events.append({

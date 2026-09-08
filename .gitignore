@@ -13,6 +13,8 @@ test_*.py
 !test_covenant_models.py
 !test_export_excel.py
 !test_browser_session.py
+!test_edisclosure_store.py
+!test_edisclosure_client.py
 show_*.py
 patch_*.py
 check_*.py
