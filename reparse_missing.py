@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import Config
-from covenant_models import build_covenant, load_results, save_results
+from covenant_models import load_results, save_results
 from pdf_parser import PDFParser
 
 config = Config()
@@ -34,18 +34,8 @@ for r in results:
     # Clear old covenants and rebuild with current logic
     r.covenants = []
 
-    for clause in result.redemption_clauses:
-        # Skip federal-law-only / Program-only references
-        if clause.has_federal_law_only and not clause.events:
-            if clause.needs_program_check:
-                r.needs_program_check = True
-            continue
-
-        if clause.events:
-            for event in clause.events:
-                r.add_covenant(build_covenant(clause=clause, event=event))
-        else:
-            r.add_covenant(build_covenant(clause=clause))
+    # Assembly rules live in the model
+    r.add_covenants_from_clauses(result.redemption_clauses)
 
     covenant_count += r.total_covenants
     updated += 1

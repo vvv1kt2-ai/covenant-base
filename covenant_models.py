@@ -11,6 +11,7 @@ Consumers: parser.py, merge_programs.py, merge_edisclosure.py,
 reparse_missing.py, export_excel.py, reclassify_categories.py.
 """
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -107,6 +108,32 @@ class ResultEntry:
         cov.number = len(self.covenants) + 1
         self.covenants.append(cov)
         return cov
+
+    def add_covenants_from_clauses(self, clauses) -> None:
+        """Assemble covenants from decision PDF redemption clauses.
+
+        Owns the assembly rules: federal-law-only clauses without events are
+        skipped (flagging needs_program_check when the clause references the
+        bond program); events become one covenant each; eventless provided
+        clauses become a single covenant. Numbering stays continuous when
+        appended to existing covenants. Append-only — clearing is the
+        caller's intent (e.g. reparse rebuilds from scratch).
+        """
+        logger = logging.getLogger(__name__)
+        for clause in clauses:
+            if clause.has_federal_law_only and not clause.events:
+                note = ""
+                if clause.needs_program_check:
+                    note = " (ссылка на Программу — проверить вручную)"
+                    self.needs_program_check = True
+                logger.info(f"  {self.isin}: 0 covenants{note}")
+                continue
+
+            if clause.events:
+                for event in clause.events:
+                    self.add_covenant(build_covenant(clause=clause, event=event))
+            else:
+                self.add_covenant(build_covenant(clause=clause))
 
     @classmethod
     def from_dict(cls, data):

@@ -238,3 +238,52 @@ def test_reclassify_updates_only_provided_covenants(results_file):
 
     # Idempotent: second run changes nothing
     assert reclassify_results(results_file) == 0
+
+
+# ---------------------------------------------------------------------------
+# Assembly: ResultEntry.add_covenants_from_clauses
+# ---------------------------------------------------------------------------
+
+def test_add_covenants_from_clauses_events_path():
+    entry = ResultEntry(isin="RU000X")
+    clauses = [make_clause(events=[make_event(), make_event(event_number=2)])]
+    entry.add_covenants_from_clauses(clauses)
+
+    assert entry.total_covenants == 2
+    assert entry.covenants[0].number == 1
+    assert entry.covenants[1].number == 2
+    assert entry.covenants[1].section == "п. 5.6.1, 2"
+    assert not entry.needs_program_check
+
+
+def test_add_covenants_from_clauses_eventless_clause():
+    entry = ResultEntry(isin="RU000X")
+    clauses = [make_clause()]
+    entry.add_covenants_from_clauses(clauses)
+
+    assert entry.total_covenants == 1
+    assert entry.covenants[0].section == "п. 5.6.1"
+    assert entry.covenants[0].essence == "Досрочное погашение облигаций"
+
+
+def test_add_covenants_from_clauses_skips_federal_law_only():
+    entry = ResultEntry(isin="RU000X")
+    clauses = [
+        make_clause(has_federal_law_only=True),
+        make_clause(has_federal_law_only=True, needs_program_check=True),
+        make_clause(events=[make_event()]),  # real covenant survives
+    ]
+    entry.add_covenants_from_clauses(clauses)
+
+    assert entry.total_covenants == 1
+    assert entry.needs_program_check is True
+
+
+def test_add_covenants_from_clauses_appends_with_continuous_numbering():
+    entry = ResultEntry(isin="RU000X")
+    entry.add_covenant(Covenant(essence="существующий"))
+    entry.add_covenants_from_clauses([make_clause(events=[make_event()])])
+
+    assert entry.total_covenants == 2
+    assert entry.covenants[0].number == 1
+    assert entry.covenants[1].number == 2

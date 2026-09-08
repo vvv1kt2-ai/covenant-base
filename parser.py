@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from config import Config
-from covenant_models import ResultEntry, build_covenant, load_results, save_results
+from covenant_models import ResultEntry, load_results, save_results
 from finam_client import FinamClient, BondCard
 from pdf_parser import PDFParser, DocumentParseResult
 
@@ -179,22 +179,8 @@ def process_isin(isin, client, pdf_parser, config):
         if doc_result.error:
             result.parse_errors.append(doc_result.error)
 
-        # Process redemption clauses
-        for clause in doc_result.redemption_clauses:
-            # Skip if no real covenants (only federal law / "не предусмотрена")
-            if clause.has_federal_law_only and not clause.events:
-                note = ""
-                if clause.needs_program_check:
-                    note = " (ссылка на Программу — проверить вручную)"
-                    result.needs_program_check = True
-                logger.info(f"  {isin}: 0 covenants{note}")
-                continue
-
-            if clause.events:
-                for event in clause.events:
-                    result.add_covenant(build_covenant(clause=clause, event=event))
-            else:
-                result.add_covenant(build_covenant(clause=clause))
+        # Assembly rules live in the model
+        result.add_covenants_from_clauses(doc_result.redemption_clauses)
 
         logger.info(
             f"Completed {isin}: {result.total_covenants} covenants found, "
