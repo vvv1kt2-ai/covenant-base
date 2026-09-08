@@ -122,8 +122,7 @@ def main():
                     "total_new": 0,
                 })
                 # Delay between ISINs
-                delay = random.uniform(20, 45)
-                time.sleep(delay)
+                client.session.human_delay()
                 continue
 
             stats["found_on_finam"] += 1
@@ -140,8 +139,7 @@ def main():
                     "new_covenants": [],
                     "total_new": 0,
                 })
-                delay = random.uniform(20, 45)
-                time.sleep(delay)
+                client.session.human_delay()
                 continue
 
             if not card.program_url:
@@ -155,8 +153,7 @@ def main():
                     "new_covenants": [],
                     "total_new": 0,
                 })
-                delay = random.uniform(20, 45)
-                time.sleep(delay)
+                client.session.human_delay()
                 continue
 
             stats["has_program"] += 1
@@ -183,8 +180,7 @@ def main():
                         "new_covenants": [],
                         "total_new": 0,
                     })
-                    delay = random.uniform(20, 45)
-                    time.sleep(delay)
+                    client.session.human_delay()
                     continue
             else:
                 logger.info(f"Program already downloaded: {filename}")
@@ -208,8 +204,7 @@ def main():
                     "new_covenants": [],
                     "total_new": 0,
                 })
-                delay = random.uniform(20, 45)
-                time.sleep(delay)
+                client.session.human_delay()
                 continue
 
             if not result.has_text_layer:
@@ -224,8 +219,7 @@ def main():
                     "new_covenants": [],
                     "total_new": 0,
                 })
-                delay = random.uniform(20, 45)
-                time.sleep(delay)
+                client.session.human_delay()
                 continue
 
             # Step 4b: Try section 9.5.1 explicitly
@@ -283,7 +277,8 @@ def main():
                 logger.info(f"Intermediate save: {len(programs_results)} results")
 
             # Delay between ISINs
-            delay = random.uniform(20, 45)
+            delay_range = client.session.delay_range
+            delay = random.uniform(*delay_range)
             logger.info(f"Waiting {delay:.1f}s...")
             time.sleep(delay)
 

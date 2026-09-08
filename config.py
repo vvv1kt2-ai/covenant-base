@@ -28,9 +28,11 @@ class Config:
     browser_timeout: int = 60_000  # ms
     captcha_timeout: int = 120_000  # ms — time to wait for manual CAPTCHA solve
 
-    # Rate limiting
-    min_delay: float = 20.0  # seconds between requests (increased for anti-bot)
-    max_delay: float = 45.0  # seconds between requests
+    # Rate limiting (seconds; (min, max) ranges per source)
+    finam_delay: tuple = (20.0, 45.0)              # between Finam requests
+    edisclosure_delay: tuple = (15.0, 30.0)        # between e-disclosure emitters
+    edisclosure_nav_delay: tuple = (5.0, 10.0)     # between e-disclosure page navigations
+    edisclosure_retry_delay: tuple = (10.0, 20.0)  # after a failed company search
 
     # Block detection
     block_cooldown_seconds: int = 300  # pause for 5 minutes if blocked

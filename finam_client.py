@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from typing import Optional
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
+from playwright.sync_api import Page
 
 from config import Config
+from browser_session import BrowserSession, FINAM_CAPTCHA, wait_captcha_resolved
 
 logger = logging.getLogger(__name__)
 
@@ -37,55 +38,24 @@ class FinamClient:
 
     def __init__(self, config: Config):
         self.config = config
-        self._playwright = None
-        self._browser: Optional[Browser] = None
-        self._context: Optional[BrowserContext] = None
-        self._page: Optional[Page] = None
+        self.session = BrowserSession(config, delay_range=config.finam_delay)
         self._consecutive_errors = 0
 
+    @property
+    def _page(self) -> Page:
+        return self.session.page
+
     def start(self):
-        """Launch browser and create context."""
-        logger.info("Starting Playwright browser...")
-        self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(
-            headless=self.config.browser_headless,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--disable-dev-shm-usage",
-                "--no-sandbox",
-            ],
-        )
-        self._context = self._browser.new_context(
-            user_agent=self.config.browser_user_agent,
-            viewport={"width": 1366, "height": 768},
-            locale=self.config.browser_locale,
-            timezone_id="Europe/Moscow",
-        )
-        # Anti-detection
-        self._context.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            window.chrome = { runtime: {} };
-        """)
-        self._page = self._context.new_page()
-        logger.info("Browser started.")
+        """Launch browser and create context (delegates to the shared session)."""
+        self.session.start()
 
     def stop(self):
-        """Clean shutdown."""
-        logger.info("Stopping browser...")
-        if self._page:
-            self._page.close()
-        if self._context:
-            self._context.close()
-        if self._browser:
-            self._browser.close()
-        if self._playwright:
-            self._playwright.stop()
-        logger.info("Browser stopped.")
+        """Clean shutdown (delegates to the shared session)."""
+        self.session.stop()
 
     def _random_delay(self):
-        """Sleep for a random duration between min_delay and max_delay."""
-        delay = random.uniform(self.config.min_delay, self.config.max_delay)
-        time.sleep(delay)
+        """Sleep for a random duration between the configured Finam delay range."""
+        self.session.human_delay()
 
     def _check_block(self):
         """If consecutive errors hit the threshold, pause and warn."""
@@ -552,31 +522,21 @@ class FinamClient:
         return None
 
     def _check_captcha(self) -> bool:
-        """Check if CAPTCHA is present on the page."""
-        try:
-            captcha_div = self._page.query_selector("#id_captcha_frame_div")
-            if captcha_div:
-                display = captcha_div.evaluate("el => getComputedStyle(el).display")
-                if display and display != "none":
-                    return True
-        except Exception:
-            pass
-        return False
+        """Check if CAPTCHA is present on the page (delegates to the detector)."""
+        return FINAM_CAPTCHA.detect(self._page)
 
     def _wait_for_captcha_resolution(self):
         """Wait for CAPTCHA to be resolved (manual intervention)."""
         logger.info("Waiting for CAPTCHA resolution (please solve in browser)...")
-        start = time.time()
-        timeout = self.config.captcha_timeout / 1000
-
-        while time.time() - start < timeout:
-            if not self._check_captcha():
-                logger.info("CAPTCHA resolved.")
-                time.sleep(2)
-                return
-            time.sleep(3)
-
-        raise TimeoutError(f"CAPTCHA not resolved within {timeout:.0f}s")
+        resolved = wait_captcha_resolved(
+            self._page, FINAM_CAPTCHA,
+            timeout_seconds=self.config.captcha_timeout / 1000,
+            min_wait=0,
+        )
+        if not resolved:
+            raise TimeoutError(
+                f"CAPTCHA not resolved within {self.config.captcha_timeout / 1000:.0f}s"
+            )
 
     def download_file(self, url: str, dest_path: Path) -> bool:
         """Download a file from st.finam.ru (no anti-bot)."""

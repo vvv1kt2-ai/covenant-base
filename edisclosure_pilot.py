@@ -23,6 +23,7 @@ from io import BytesIO
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import Config
+from browser_session import BrowserSession, EDISCLOSURE_CAPTCHA, wait_captcha_resolved
 from pdf_parser import PDFParser
 
 logging.basicConfig(
@@ -109,81 +110,31 @@ def get_sections_for_emitter(emitter_name, program_number, section_refs):
 
 
 def is_captcha_page(page):
-    """Detect if current page is a CAPTCHA / anti-bot challenge page."""
-    try:
-        return page.evaluate("""
-            () => {
-                const body = (document.body ? document.body.innerText : '').toLowerCase();
-                const url = window.location.href;
-                // e-disclosure.ru challenge page patterns
-                const hasBotChallenge = body.includes('не с ботом')
-                    || body.includes('разверните картинку')
-                    || body.includes('пожалуйста, пройдите проверку')
-                    || body.includes('что-то в поведении вашего браузера')
-                    || body.includes('prove you are not a robot');
-                const isChallengeUrl = url.includes('/xpvnsulc/')
-                    || url.includes('/exhkqyad/')
-                    || url.includes('challenge');
-                const hasCaptchaIframe = document.querySelector('iframe[src*="captcha"]') !== null
-                    || document.querySelector('.captcha') !== null
-                    || document.querySelector('#captcha') !== null;
-                return hasBotChallenge || isChallengeUrl || hasCaptchaIframe;
-            }
-        """)
-    except Exception:
-        return False
+    """Detect if current page is a CAPTCHA / anti-bot challenge page (delegates)."""
+    return EDISCLOSURE_CAPTCHA.detect(page)
 
 
 def check_and_handle_captcha(page, max_wait_seconds=120):
     """Check for CAPTCHA and wait for manual resolution.
 
-    First 15 seconds: wait even if auto-resolved (gives user time to see/solve)
-    After 15s: accept auto-resolution
+    Delegates to the shared wait loop (min 15s even after auto-resolution).
     Returns True if CAPTCHA was detected but NOT resolved (error),
     False if either no CAPTCHA or CAPTCHA was resolved.
     """
-    try:
-        if not is_captcha_page(page):
-            return False
+    if not EDISCLOSURE_CAPTCHA.detect(page):
+        return False
 
-        logger.warning("=" * 60)
-        logger.warning("CAPTCHA / ANTI-BOT CHALLENGE DETECTED!")
-        logger.warning("Please solve it in the browser window.")
-        logger.warning(f"Waiting up to {max_wait_seconds}s...")
-        logger.warning("=" * 60)
+    logger.warning("=" * 60)
+    logger.warning("CAPTCHA / ANTI-BOT CHALLENGE DETECTED!")
+    logger.warning("Please solve it in the browser window.")
+    logger.warning(f"Waiting up to {max_wait_seconds}s...")
+    logger.warning("=" * 60)
 
-        MIN_WAIT = 15  # Minimum seconds even if auto-resolved
-        start = time.time()
-
-        while time.time() - start < max_wait_seconds:
-            time.sleep(3)
-            elapsed = time.time() - start
-
-            try:
-                still_captcha = is_captcha_page(page)
-            except Exception:
-                # Navigation happened (page destroyed) — likely resolved
-                still_captcha = False
-
-            if not still_captcha:
-                if elapsed < MIN_WAIT:
-                    logger.info(f"CAPTCHA seems resolved after {elapsed:.0f}s, "
-                                f"but waiting {MIN_WAIT - elapsed:.0f}s more for safety...")
-                    time.sleep(MIN_WAIT - elapsed)
-                logger.info("CAPTCHA resolved! Continuing...")
-                try:
-                    page.wait_for_load_state("load", timeout=10_000)
-                except Exception:
-                    pass
-                return False
-
-        logger.error("CAPTCHA not resolved within timeout")
-        return True
-
-    except Exception as e:
-        logger.debug(f"CAPTCHA check error: {e}")
-
-    return False
+    return not wait_captcha_resolved(
+        page, EDISCLOSURE_CAPTCHA,
+        timeout_seconds=max_wait_seconds,
+        min_wait=15,
+    )
 
 
 def wait_for_page_ready(page, target_url_fragment=None, timeout=20_000):
@@ -203,7 +154,7 @@ def wait_for_page_ready(page, target_url_fragment=None, timeout=20_000):
     return True
 
 
-def search_emitter_on_edisclosure(page, emitter_name, isin=None, program_number=None, company_ids_db=None):
+def search_emitter_on_edisclosure(session, emitter_name, isin=None, program_number=None, company_ids_db=None):
     """Search e-disclosure.ru for an emitter.
 
     Strategy:
@@ -211,6 +162,9 @@ def search_emitter_on_edisclosure(page, emitter_name, isin=None, program_number=
     2. Search for ISIN in message text (#textfieldEvent)
     3. Search by program number in message text (#textfieldEvent)
     4. Search by emitter name in company field (#textfieldCompany)
+
+    Takes the (lazy) BrowserSession — the browser starts only when a
+    strategy actually needs a page, i.e. on a cache miss.
     """
     # Check persistent database first
     if company_ids_db and emitter_name in company_ids_db:
@@ -218,6 +172,9 @@ def search_emitter_on_edisclosure(page, emitter_name, isin=None, program_number=
         logger.info(f"Using cached companyId for {emitter_name}: {cid} "
                      f"(source: {company_ids_db[emitter_name].get('source', '?')})")
         return cid
+
+    # Cache missed — a real search follows, browser starts here on first use
+    page = session.page
 
     # Strategy 1: Search by ISIN in message text
     if isin:
@@ -686,28 +643,22 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Only search, don't download")
     args = parser.parse_args()
 
-    from playwright.sync_api import sync_playwright
-
     # Load persistent data
     section_refs = load_section_refs()
     company_ids_db = load_company_ids()
     logger.info(f"Loaded section refs for {len(section_refs)} ISINs")
     logger.info(f"Loaded {len(company_ids_db)} known companyIds from {COMPANY_IDS_PATH.name}")
 
-    logger.info("Starting Playwright for e-disclosure pilot...")
+    logger.info("e-disclosure pilot starting (browser launches lazily, on first real search)")
     logger.info("NOTE: If CAPTCHA appears, solve it manually in the browser window")
 
     download_base = config.base_dir / "downloads" / "edisclosure_programs"
     download_base.mkdir(parents=True, exist_ok=True)
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=False)  # Visible for CAPTCHA
-        context = browser.new_context(
-            user_agent=config.browser_user_agent,
-            locale=config.browser_locale,
-        )
-        page = context.new_page()
-
+    # Visible browser (manual CAPTCHA solving); lazy — dry-run with a warm
+    # company_ids.json cache never touches Playwright at all
+    session = BrowserSession(config, delay_range=config.edisclosure_delay, headless=False, lazy=True)
+    try:
         results = []
 
         for emitter in EMITTERS:
@@ -726,9 +677,10 @@ def main():
             emitter_dir = download_base / name.replace(" ", "_")
             emitter_dir.mkdir(parents=True, exist_ok=True)
 
-            # Step 1: Search for company (uses company_ids.json cache first)
+            # Step 1: Search for company (cache-first; a warm cache never
+            # touches the browser — lazy session stays cold in dry-run)
             company_id = search_emitter_on_edisclosure(
-                page, name, isin=isins[0], program_number=prog_num,
+                session, name, isin=isins[0], program_number=prog_num,
                 company_ids_db=company_ids_db
             )
 
@@ -741,7 +693,7 @@ def main():
                     "target_sections": target_sections,
                     "status": "company_not_found",
                 })
-                time.sleep(random.uniform(10, 20))
+                time.sleep(random.uniform(*config.edisclosure_retry_delay))
                 continue
 
             # Save newly found companyId to persistent database
@@ -749,7 +701,6 @@ def main():
                 save_company_id(company_ids_db, name, company_id)
 
             logger.info(f"companyId: {company_id}")
-            time.sleep(random.uniform(5, 10))
 
             if args.dry_run:
                 results.append({
@@ -762,9 +713,12 @@ def main():
                 })
                 continue
 
+            # Politeness pause between real page visits (cache-only dry-run skips it)
+            time.sleep(random.uniform(*config.edisclosure_nav_delay))
+
             # Step 2: Get files and download
             all_files, program_files, downloaded = get_file_list_and_download(
-                page, company_id, name, prog_num, emitter_dir
+                session.page, company_id, name, prog_num, emitter_dir
             )
 
             # Step 3: Parse with specific sections
@@ -793,9 +747,8 @@ def main():
                 "status": "parsed" if program_covenants else ("downloaded" if downloaded else "no_program_files"),
             })
 
-            delay = random.uniform(15, 30)
-            logger.info(f"Waiting {delay:.1f}s...")
-            time.sleep(delay)
+            session.human_delay()
+            logger.info("Delay done.")
 
         # Save
         output_path = config.base_dir / "edisclosure_pilot.json"
@@ -819,7 +772,8 @@ def main():
 
         logger.info(f"\nTotal new covenants from e-disclosure: {total_new}")
 
-        browser.close()
+    finally:
+        session.stop()  # no-op if the lazy session never started
 
     return results
 
