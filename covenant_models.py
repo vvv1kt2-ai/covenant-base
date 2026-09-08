@@ -55,6 +55,12 @@ class Covenant:
             conditions=data.get("conditions", ""),
         )
 
+    @property
+    def is_from_program(self) -> bool:
+        """True if this covenant came from a bond program document
+        (either merged from Finam or e-disclosure)."""
+        return self.document.startswith("Программа")
+
     def to_dict(self):
         return {
             "number": self.number,

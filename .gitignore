@@ -11,6 +11,7 @@ template_dump.txt
 fix_*.py
 test_*.py
 !test_covenant_models.py
+!test_export_excel.py
 show_*.py
 patch_*.py
 check_*.py

@@ -118,13 +118,10 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
             total_with_covenants += 1
 
             for i, cov in enumerate(covenants):
-                is_provided = cov.is_provided
-                is_from_program = "Программа" in cov.document
+                is_from_program = cov.is_from_program
 
-                if is_provided:
-                    category = "Информационный (отчётность эмитента) +\nРаскрытие отчётности эмитента"
-                else:
-                    category = "Положения о досрочном погашении"
+                # Category comes from the model's unified 7-category taxonomy
+                category = cov.category
 
                 # Essence comes directly from parser (event title or section title)
                 essence = cov.essence
