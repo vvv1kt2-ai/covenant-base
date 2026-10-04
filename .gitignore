@@ -18,6 +18,7 @@ test_*.py
 !test_parser_plan.py
 !test_add_new_issues.py
 !test_merge_results.py
+!test_export_new_issues.py
 show_*.py
 patch_*.py
 check_*.py

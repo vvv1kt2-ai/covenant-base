@@ -118,3 +118,33 @@ def test_program_covenant_category_and_tint(work_dir):
     # Green tint on the program-sourced row, none on the decision row
     assert ws.cell(row=3, column=CATEGORY_COL).fill.start_color.rgb in ("00E2EFDA", "FFE2EFDA")
     assert ws.cell(row=2, column=CATEGORY_COL).fill.fill_type != "solid"
+
+
+def test_isins_filter_exports_only_that_subset(work_dir):
+    """A batch handover: only the listed ISINs reach the sheet."""
+    src = work_dir / "results.json"
+    save_results(src, make_entries())
+    out = work_dir / "subset.xlsx"
+
+    export_to_excel(results_path=str(src), output_path=str(out), isins=["RU000A1089A3"])
+    ws = load_workbook(out).active
+
+    exported = [ws.cell(row=r, column=ISIN_COL).value
+                for r in range(2, ws.max_row + 1)
+                if ws.cell(row=r, column=ISIN_COL).value]
+    assert exported == ["RU000A1089A3"]      # error and zero-covenant ISINs excluded
+
+
+def test_isins_filter_accepts_unknown_and_blank_entries(work_dir):
+    src = work_dir / "results.json"
+    save_results(src, make_entries())
+    out = work_dir / "subset.xlsx"
+
+    export_to_excel(results_path=str(src), output_path=str(out),
+                    isins=["RU000A1089A3", "", "  ", "RU000A10NOPE"])
+    ws = load_workbook(out).active
+
+    exported = [ws.cell(row=r, column=ISIN_COL).value
+                for r in range(2, ws.max_row + 1)
+                if ws.cell(row=r, column=ISIN_COL).value]
+    assert exported == ["RU000A1089A3"]

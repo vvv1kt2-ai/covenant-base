@@ -12,9 +12,28 @@ except ImportError:
 from covenant_models import load_results
 
 
-def export_to_excel(results_path: str = "results.json", output_path: str = "covarianants.xlsx"):
+def export_to_excel(results_path: str = "results.json", output_path: str = "covarianants.xlsx",
+                    isins=None):
+    """Export results to Excel.
+
+    isins: optional iterable of ISINs — only those records are exported
+    (same template and formatting, useful for handing over one batch).
+    """
     data = load_results(results_path)
 
+    if isins is not None:
+        wanted = {i.strip().upper() for i in isins if i and i.strip()}
+        data = [r for r in data if r.isin.upper() in wanted]
+
+    return export_entries_to_excel(data, output_path)
+
+
+def export_entries_to_excel(data, output_path: str = "covarianants.xlsx"):
+    """Render already-loaded records to the template workbook.
+
+    Separate from loading so callers that modify records in memory (e.g.
+    filling ratings from a MOEX export) can render them directly.
+    """
     wb = Workbook()
     ws = wb.active
     ws.title = "Ковенанты"
@@ -230,6 +249,18 @@ def export_to_excel(results_path: str = "results.json", output_path: str = "cova
 
 
 if __name__ == "__main__":
-    import sys as _sys
-    out = _sys.argv[1] if len(_sys.argv) > 1 else "covarianants.xlsx"
-    export_to_excel(output_path=out)
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Export results.json to Excel")
+    parser.add_argument("output", nargs="?", default="covarianants.xlsx", help="Output .xlsx path")
+    parser.add_argument("--results", default="results.json", help="Source results file")
+    parser.add_argument("--isins", help="File with ISINs (one per line) to export a subset")
+    args = parser.parse_args()
+
+    isins = None
+    if args.isins:
+        isins = [line.strip() for line in Path(args.isins).read_text(encoding="utf-8").splitlines()
+                 if line.strip()]
+        print(f"Filtering to {len(isins)} ISINs from {args.isins}")
+
+    export_to_excel(results_path=args.results, output_path=args.output, isins=isins)
