@@ -15,6 +15,9 @@ test_*.py
 !test_browser_session.py
 !test_edisclosure_store.py
 !test_edisclosure_client.py
+!test_parser_plan.py
+!test_add_new_issues.py
+!test_merge_results.py
 show_*.py
 patch_*.py
 check_*.py
@@ -22,6 +25,10 @@ inspect_*.py
 dedup_*.py
 remerge_*.py
 debug_*.py
+probe_*.py
+
+# Generated ISIN worklist (add_new_issues.py)
+new_isins.txt
 
 # Large generated files
 *.zip

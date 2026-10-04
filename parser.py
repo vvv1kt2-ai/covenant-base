@@ -195,6 +195,37 @@ def process_isin(isin, client, pdf_parser, config):
     return result
 
 
+def plan_run(existing, isins, resume=False, retry_errors=False):
+    """Decide which ISINs to (re)process and which existing records to keep.
+
+    Returns (isins_to_process, records_to_keep).
+
+    - resume: cleanly parsed records are done; records WITH errors are retried
+    - retry_errors: only ISINs whose existing record has errors are processed
+    - neither: fresh run over the given input
+
+    Records about to be re-processed are dropped from the kept set, so a
+    retried ISIN replaces its old record instead of duplicating it. Records
+    that are not part of this run always survive.
+    """
+    if not existing:
+        return list(isins), []
+
+    error_isins = {r.isin for r in existing if r.parse_errors}
+
+    if resume:
+        done = {r.isin for r in existing if not r.parse_errors}
+        to_process = [i for i in isins if i not in done]
+    elif retry_errors:
+        to_process = [i for i in isins if i in error_isins]
+    else:
+        to_process = list(isins)
+
+    retry_isins = {i for i in to_process if i in error_isins}
+    kept = [r for r in existing if r.isin not in retry_isins]
+    return to_process, kept
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -248,38 +279,32 @@ def main():
 
     output_path = Path(args.output)
     existing_results = []
-    processed_isins = set()
 
-    # Resume mode: load existing results, skip already-processed ISINs
-    if args.resume and output_path.exists():
+    # When mutating an existing results file (--resume / --retry-errors), load it
+    # as the base so records we are NOT re-processing survive untouched.
+    if (args.resume or args.retry_errors) and output_path.exists():
         try:
-            for r in load_results(output_path):
-                # Skip ISINs that were processed without fatal errors
-                if not r.parse_errors or r.total_covenants > 0:
-                    processed_isins.add(r.isin)
-                    existing_results.append(r)
-            logger.info(f"Resume mode: {len(processed_isins)} ISINs already processed, will skip them")
-        except Exception as e:
-            logger.warning(f"Failed to load existing results for resume: {e}")
-
-    if args.retry_errors and output_path.exists():
-        try:
-            error_isins = {r.isin for r in load_results(output_path) if r.parse_errors}
-            isins = [i for i in isins if i in error_isins]
-            logger.info(f"Retry mode: {len(isins)} ISINs with errors to retry")
+            existing_results = load_results(output_path)
         except Exception as e:
             logger.warning(f"Failed to load existing results: {e}")
 
-    # Filter out already processed ISINs
-    if processed_isins:
-        before = len(isins)
-        isins = [i for i in isins if i not in processed_isins]
-        logger.info(f"Skipping {before - len(isins)} already-processed ISINs, {len(isins)} remaining")
+    total_input = len(isins)
+    isins, existing_results = plan_run(
+        existing_results, isins,
+        resume=args.resume, retry_errors=args.retry_errors,
+    )
+    if args.resume:
+        logger.info(f"Resume mode: {total_input - len(isins)} of {total_input} ISINs "
+                    f"already parsed cleanly, {len(isins)} to process")
+    elif args.retry_errors:
+        logger.info(f"Retry mode: {len(isins)} of {total_input} ISINs have errors and will be retried")
+    if existing_results:
+        logger.info(f"Keeping {len(existing_results)} existing records untouched")
 
     pdf_parser = PDFParser(config)
     client = FinamClient(config)
 
-    results = list(existing_results) if existing_results else []
+    results = list(existing_results)
     start_time = time.time()
 
     try:
