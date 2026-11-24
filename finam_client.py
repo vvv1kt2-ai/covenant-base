@@ -233,6 +233,25 @@ class FinamClient:
         self._random_delay()
         return None
 
+    _DETAILS_MARKER = "/issue/details"
+
+    @staticmethod
+    def _hex_from_href(href: str) -> Optional[str]:
+        """Bond hex code from a Finam link: `/issue/details048A2/default.asp` → `048A2`."""
+        if not href or FinamClient._DETAILS_MARKER not in href:
+            return None
+        rest = href.split(FinamClient._DETAILS_MARKER, 1)[1]
+        hex_part = rest.split("/")[0].split("?")[0].strip("'\"")
+        return hex_part or None
+
+    @staticmethod
+    def _mentions(needle: str, *haystacks: str) -> bool:
+        """Case-insensitive substring check across several fields."""
+        if not needle:
+            return False
+        needle = needle.upper()
+        return any(needle in (hay or "").upper() for hay in haystacks)
+
     def _extract_hex_code_from_results(self, isin: str, issuer_name: str = "") -> Optional[str]:
         """
         Extract the bond hex code from search results page.
@@ -241,11 +260,14 @@ class FinamClient:
         /issue/details00007/default.asp
         /issue/details048A2/default.asp
 
-        Matching strategy:
-        1. ISIN in link text or href
-        2. ISIN in parent row/table cell text
-        3. Issuer name in link text (for name-based search)
-        4. Single-result shortcut (if only 1 details link, use it)
+        Matching strategy — strict when an ISIN is given:
+        1. ISIN in link text, href or parent row text
+        2. Issuer name in link text (name-based search only, no ISIN)
+        3. Single-result shortcut (name-based search only)
+
+        An ISIN search never falls back to a name match or to "the first link":
+        a wrong card means silently parsing another issuer's bond, which is worse
+        than returning None and letting the entry go to manual check.
         """
         # Method 1: Use JavaScript to find all links with row context
         try:
@@ -275,48 +297,40 @@ class FinamClient:
                 row_preview = link_info.get('rowText', '')[:200]
                 logger.info(f"       rowText={row_preview!r}")
 
-            # Pass 1: exact ISIN match in text or href
+            # Pass 1: exact ISIN match in text, href or row text
             if isin:
                 for link_info in links_data:
                     href = link_info.get('href', '')
-                    text = link_info.get('text', '')
-                    row_text = link_info.get('rowText', '')
-
-                    if isin.upper() in text.upper() or isin.upper() in href.upper() or isin.upper() in row_text.upper():
-                        if "/issue/details" in href:
-                            parts = href.split("/issue/details")
-                            if len(parts) > 1:
-                                hex_part = parts[1].split("/")[0].split("?")[0]
-                                logger.info(f"Found hex code {hex_part} from ISIN match")
-                                return hex_part
-
-            # Pass 2: issuer name match (for name-based search)
-            if issuer_name:
-                for link_info in links_data:
-                    href = link_info.get('href', '')
-                    text = link_info.get('text', '')
-                    row_text = link_info.get('rowText', '')
-
-                    if issuer_name.upper() in text.upper() or issuer_name.upper() in row_text.upper():
-                        if "/issue/details" in href:
-                            parts = href.split("/issue/details")
-                            if len(parts) > 1:
-                                hex_part = parts[1].split("/")[0].split("?")[0]
-                                logger.info(f"Found hex code {hex_part} from issuer name match ({issuer_name!r})")
-                                return hex_part
-
-            # Pass 3: if only 1 details link, use it (search is specific enough)
-            if len(links_data) == 1:
-                href = links_data[0].get('href', '')
-                if "/issue/details" in href:
-                    parts = href.split("/issue/details")
-                    if len(parts) > 1:
-                        hex_part = parts[1].split("/")[0].split("?")[0]
-                        logger.info(f"Found hex code {hex_part} from single-result shortcut")
+                    if not self._mentions(isin, link_info.get('text', ''), href, link_info.get('rowText', '')):
+                        continue
+                    hex_part = self._hex_from_href(href)
+                    if hex_part:
+                        logger.info(f"Found hex code {hex_part} from ISIN match")
                         return hex_part
 
-            if links_data:
-                logger.warning(f"No exact ISIN match found in {len(links_data)} search results")
+                logger.warning(
+                    f"ISIN {isin} not matched among {len(links_data)} search results — "
+                    f"refusing to guess"
+                )
+
+            # Pass 2: issuer name match — name-based search only. With an ISIN given,
+            # a name hit is a different bond and must not be accepted.
+            elif issuer_name:
+                for link_info in links_data:
+                    href = link_info.get('href', '')
+                    if not self._mentions(issuer_name, link_info.get('text', ''), link_info.get('rowText', '')):
+                        continue
+                    hex_part = self._hex_from_href(href)
+                    if hex_part:
+                        logger.info(f"Found hex code {hex_part} from issuer name match ({issuer_name!r})")
+                        return hex_part
+
+            # Pass 3: single-result shortcut — name-based search only
+            elif len(links_data) == 1:
+                hex_part = self._hex_from_href(links_data[0].get('href', ''))
+                if hex_part:
+                    logger.info(f"Found hex code {hex_part} from single-result shortcut")
+                    return hex_part
 
         except Exception as e:
             logger.warning(f"JavaScript link extraction failed: {e}")
@@ -346,30 +360,25 @@ class FinamClient:
                 logger.info(f"  [{i}] text={item.get('text', '')!r} onclick={item.get('onclick', '')[-50:]}")
 
             for item in onclick_data:
-                onclick = item.get('onclick', '')
-                text = item.get('text', '')
-                row_text = item.get('rowText', '')
+                hex_part = self._hex_from_href(item.get('onclick', ''))
+                if not hex_part:
+                    continue
 
-                if "/issue/details" in onclick:
-                    parts = onclick.split("/issue/details")
-                    if len(parts) > 1:
-                        hex_part = parts[1].split("/")[0].split("?")[0].strip("'\"")
-                        if isin and (isin.upper() in text.upper() or isin.upper() in row_text.upper()):
-                            logger.info(f"Found hex code {hex_part} from onclick ISIN match")
-                            return hex_part
-                        if issuer_name and (issuer_name.upper() in text.upper() or issuer_name.upper() in row_text.upper()):
-                            logger.info(f"Found hex code {hex_part} from onclick issuer name match")
-                            return hex_part
+                if isin and self._mentions(isin, item.get('text', ''), item.get('rowText', '')):
+                    logger.info(f"Found hex code {hex_part} from onclick ISIN match")
+                    return hex_part
+                if not isin and issuer_name and self._mentions(
+                    issuer_name, item.get('text', ''), item.get('rowText', '')
+                ):
+                    logger.info(f"Found hex code {hex_part} from onclick issuer name match")
+                    return hex_part
 
-            # Single-result shortcut for onclick too
-            if len(onclick_data) == 1:
-                onclick = onclick_data[0].get('onclick', '')
-                if "/issue/details" in onclick:
-                    parts = onclick.split("/issue/details")
-                    if len(parts) > 1:
-                        hex_part = parts[1].split("/")[0].split("?")[0].strip("'\"")
-                        logger.info(f"Found hex code {hex_part} from onclick single-result shortcut")
-                        return hex_part
+            # Single-result shortcut for onclick — name-based search only
+            if not isin and len(onclick_data) == 1:
+                hex_part = self._hex_from_href(onclick_data[0].get('onclick', ''))
+                if hex_part:
+                    logger.info(f"Found hex code {hex_part} from onclick single-result shortcut")
+                    return hex_part
 
         except Exception as e:
             logger.warning(f"JavaScript onclick extraction failed: {e}")
@@ -397,23 +406,28 @@ class FinamClient:
             if page_match and page_match.get('found'):
                 logger.info(f"ISIN {isin} found in page text")
                 links = page_match.get('links', [])
-                if len(links) == 1:
-                    href = links[0].get('href', '')
-                    if "/issue/details" in href:
-                        parts = href.split("/issue/details")
-                        if len(parts) > 1:
-                            hex_part = parts[1].split("/")[0].split("?")[0]
-                            logger.info(f"Found hex code {hex_part} from page-text single link")
-                            return hex_part
-                elif links:
-                    # Multiple links — return the first one (search is specific enough)
-                    href = links[0].get('href', '')
-                    if "/issue/details" in href:
-                        parts = href.split("/issue/details")
-                        if len(parts) > 1:
-                            hex_part = parts[1].split("/")[0].split("?")[0]
-                            logger.info(f"Found hex code {hex_part} from page-text first link ({len(links)} total)")
-                            return hex_part
+                # Only links that carry the ISIN themselves are acceptable: the string
+                # may sit anywhere on the page, next to an unrelated bond.
+                candidates = [
+                    code for code in (
+                        self._hex_from_href(link.get('href', ''))
+                        for link in links
+                        if self._mentions(isin, link.get('text', ''), link.get('href', ''))
+                    ) if code
+                ]
+                if len(candidates) == 1:
+                    logger.info(f"Found hex code {candidates[0]} from page-text ISIN match")
+                    return candidates[0]
+                if len(candidates) > 1:
+                    logger.warning(
+                        f"ISIN {isin} matches {len(candidates)} links ({candidates}) — "
+                        f"refusing to guess"
+                    )
+                else:
+                    logger.warning(
+                        f"ISIN {isin} present in page text but no link carries it — "
+                        f"refusing to guess"
+                    )
             else:
                 snippet = (page_match or {}).get('bodySnippet', '')[:200]
                 logger.warning(f"ISIN {isin} not found in page text. Body snippet: {snippet!r}")
@@ -435,7 +449,12 @@ class FinamClient:
             error_str = str(e).lower()
             if "timed_out" in error_str or "err_connection" in error_str:
                 self._consecutive_errors += 1
-                logger.warning(f"Connection error on card page: {e}")
+                logger.warning(
+                    f"Connection error on card page "
+                    f"(consecutive: {self._consecutive_errors}): {e}"
+                )
+                if self._consecutive_errors >= self.config.max_consecutive_errors:
+                    self._handle_block()
                 return None
             raise
 
