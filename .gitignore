@@ -44,3 +44,13 @@ pytest-cache-files-*/
 # Data files - track these explicitly with git add -f if needed
 results.json
 *.xlsx
+
+# Публикационный слой
+# Код отслеживается всегда, включая имена, которые ловят шаблоны выше (check_*.py).
+!publication/tools/*.py
+# Данные в git не входят: реестры, выгрузки, готовый материал, tmp-кэш и растр.
+# В репозитории остаётся только описание того, что должно лежать в каталоге.
+publication/data/*
+!publication/data/README.md
+publication/data/tmp/
+publication/img/
