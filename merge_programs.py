@@ -8,7 +8,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from covenant_models import build_program_covenant, is_real_covenant, load_results, save_results
+from covenant_models import (
+    build_program_covenant, is_delisting_covenant, load_results, save_results,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,10 +56,8 @@ def main():
             title = ev.get("title", "")
             full_text = ev.get("full_text", "")
             section = ev.get("section", "9.5.1")
-            text_to_check = full_text or title
-
-            # Filter: only real covenants from programs
-            if not is_real_covenant(text_to_check):
+            # Filter: only delisting is a real covenant from programs
+            if not is_delisting_covenant(title, full_text):
                 logger.info(f"  SKIP {isin}: not a real covenant: {title[:60]}")
                 continue
 

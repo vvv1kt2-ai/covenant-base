@@ -267,14 +267,19 @@ def classify_covenant_text(essence, conditions=""):
     return categorize_covenant(f"{essence} {conditions or ''}")
 
 
-def is_real_covenant(text):
-    """Check if a program-sourced covenant is a real covenant (not just mechanism description).
+def is_delisting_covenant(title, full_text=""):
+    """Программный ковенант считается реальным только если событие — делистинг.
 
-    From user: only 'delisting' is a real covenant from programs.
-    Liquidation, 'provided by law', and partial redemption mechanism are not.
+    Правило от заказчика: ликвидация, «предусмотрено законом» и механика
+    частичного погашения реальными ковенантами не являются.
+
+    Проверяется заголовок события, а не весь full_text: описание другого
+    основания может упоминать делистинг по касательной, и тогда ковенант
+    попадал в результаты с чужим смыслом. Если заголовка нет, берётся
+    full_text — иного источника типа события не остаётся.
     """
-    lower = text.lower() if text else ""
-    return "делистинг" in lower
+    text = (title or "").strip() or (full_text or "").strip()
+    return "делистинг" in text.lower()
 
 
 def reclassify_results(path) -> int:

@@ -18,7 +18,7 @@ from covenant_models import (
     build_program_covenant,
     categorize_covenant,
     classify_covenant_text,
-    is_real_covenant,
+    is_delisting_covenant,
     load_results,
     reclassify_results,
     save_results,
@@ -216,10 +216,25 @@ def test_build_program_covenant_extracts_essence():
     assert cov.section == "п. 9.5"
 
 
-def test_is_real_covenant_only_delisting():
-    assert is_real_covenant("в случае делистинга облигаций")
-    assert not is_real_covenant("в случае ликвидации эмитента")
-    assert not is_real_covenant("предусмотрено законом")
+def test_is_delisting_covenant_only_delisting():
+    assert is_delisting_covenant("в случае делистинга облигаций")
+    assert not is_delisting_covenant("в случае ликвидации эмитента")
+    assert not is_delisting_covenant("предусмотрено законом")
+
+
+def test_is_delisting_covenant_ignores_delisting_mention_inside_other_event():
+    """Описание ликвидации может упоминать делистинг по касательной."""
+    title = "Ликвидация эмитента"
+    full_text = (
+        "В случае ликвидации эмитента, а также при делистинге облигаций "
+        "владельцы вправе требовать досрочного погашения."
+    )
+    assert not is_delisting_covenant(title, full_text)
+
+
+def test_is_delisting_covenant_falls_back_to_full_text_without_title():
+    assert is_delisting_covenant("", "при делистинге облигаций эмитента")
+    assert not is_delisting_covenant("", "при ликвидации эмитента")
 
 
 # ---------------------------------------------------------------------------
